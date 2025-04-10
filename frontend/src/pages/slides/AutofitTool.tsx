@@ -329,13 +329,18 @@ const AutofitTool = () => {
                 </span>
                 <span className="font-medium">{progress}%</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-4 shadow-inner">
+              <div className="w-full bg-gray-200 rounded-full h-4 shadow-inner overflow-hidden">
                 <div 
-                  className="bg-primary-600 h-4 rounded-full transition-all duration-300 flex items-center justify-end"
-                  style={{ width: `${progress}%` }}
+                  className={`h-4 rounded-full transition-all duration-300 relative ${
+                    error ? 'bg-red-500' : 'bg-gradient-to-r from-[#c79b6d] to-[#daaa7c]'
+                  }`}
+                  style={{ width: error ? '100%' : `${progress}%` }}
                 >
-                  <div className="bg-primary-400 h-2 w-10 rounded-full animate-pulse mx-2" 
-                       style={{ display: progress < 10 ? 'none' : 'block' }}></div>
+                  {!error && progress < 100 && (
+                    <div className="absolute inset-0 bg-white bg-opacity-20 overflow-hidden flex">
+                      <div className="h-full w-8 bg-white bg-opacity-30 transform -skew-x-30 animate-shimmer"></div>
+                    </div>
+                  )}
                 </div>
               </div>
               <p className="text-xs text-gray-500 mt-2 text-center">
@@ -393,7 +398,7 @@ const AutofitTool = () => {
                   <div className="mt-6 flex justify-center">
                     <button
                       onClick={handleDownloadAll}
-                      className="bg-primary-700 hover:bg-primary-800 text-white px-5 py-2.5 rounded-lg flex items-center"
+                      className="bg-gradient-to-b from-[#daaa7c] to-[#c79b6d] hover:from-[#c79b6d] hover:to-[#b78c5e] text-white px-5 py-2.5 rounded-lg flex items-center shadow-md"
                     >
                       <FaFileArchive className="mr-2" /> Descargar todos
                     </button>
