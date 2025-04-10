@@ -5,8 +5,6 @@ import os
 import shutil
 import uuid
 from pathlib import Path
-import subprocess
-from typing import List, Dict, Any
 import logging
 import json
 import sys
@@ -26,11 +24,10 @@ STORAGE_DIR.mkdir(exist_ok=True, parents=True)
 # Configurar logging
 logger = logging.getLogger("translate_pptx")
 logger.setLevel(logging.DEBUG)
-handler = logging.StreamHandler()
-handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    logger.addHandler(handler)
 
 def save_to_storage(file_path: str) -> str:
     """Guarda un archivo en almacenamiento permanente y devuelve su ID"""
@@ -67,7 +64,6 @@ def process_translation_task(input_path: str, output_dir: str, source_lang: str,
         output_path = Path(output_dir) / f"{Path(input_path).stem}_translated_{target_lang}.pptx"
         
         # Iniciar traductor
-        logger.info("Iniciando traductor...")
         translator = Translator(target_language=target_lang, use_cache=True)
         editor = PPTXEditor(translator)
         
@@ -83,67 +79,7 @@ def process_translation_task(input_path: str, output_dir: str, source_lang: str,
         logger.info(f"Traducción completada: {result_path}")
         
         # Recopilar estadísticas
-        stats = {
-            "slides_processed": getattr(editor, "slides_processed", 0),
-            "texts_translated": getattr(editor, "total_texts", 0),
-            "total_time": time.time() - start_time,
-            "api_calls": max(1, getattr(translator, "api_calls", 0)),
-            "rate_limit_retries": getattr(translator, "rate_limit_retries", 0),
-            "successful_retries": getattr(translator, "successful_retries", 0),
-            "errors": getattr(translator, "errors", 0),
-            "duplicates_avoided": getattr(translator, "duplicates_avoided", 0),
-            "cache_hits": getattr(translator, "cache_hits", 0),
-            "cache_misses": getattr(translator, "cache_misses", 0),
-            "input_tokens": getattr(translator, "total_input_tokens", 0),
-            "output_tokens": getattr(translator, "total_output_tokens", 0),
-            "cached_tokens": getattr(translator, "cached_tokens", 0),
-        }
-        
-        # Asegurar tokens mínimos si hay textos
-        if stats["texts_translated"] > 0 and stats["input_tokens"] == 0 and stats["cached_tokens"] == 0:
-            tokens_per_text = 25
-            if stats["cache_hits"] > 0:
-                stats["cached_tokens"] = stats["texts_translated"] * tokens_per_text
-            else:
-                stats["input_tokens"] = stats["texts_translated"] * tokens_per_text
-                stats["output_tokens"] = stats["texts_translated"] * tokens_per_text * 1.2
-        
-        # Calcular totales
-        stats["total_tokens"] = stats["input_tokens"] + stats["output_tokens"] + stats["cached_tokens"]
-        
-        # Calcular costos
-        input_cost = (stats["input_tokens"] / 1_000_000) * 3.75
-        cached_cost = (stats["cached_tokens"] / 1_000_000) * 1.875
-        output_cost = (stats["output_tokens"] / 1_000_000) * 15.0
-        total_cost = input_cost + cached_cost + output_cost
-        
-        stats["input_cost"] = input_cost
-        stats["cached_cost"] = cached_cost
-        stats["output_cost"] = output_cost
-        stats["total_cost"] = total_cost
-        
-        # Métricas adicionales
-        if stats["total_tokens"] > 0:
-            stats["cost_per_1k_tokens"] = (total_cost * 1000) / stats["total_tokens"]
-        else:
-            stats["cost_per_1k_tokens"] = 0
-        
-        stats["tokens_per_second"] = stats["total_tokens"] / max(0.1, stats["total_time"])
-        stats["slides_per_second"] = stats["slides_processed"] / max(0.1, stats["total_time"])
-        
-        # Métricas de caché
-        cache_total = stats["cache_hits"] + stats["cache_misses"]
-        stats["cache_hit_rate"] = (stats["cache_hits"] / cache_total) * 100 if cache_total > 0 else 0
-        
-        # Resumen global
-        stats["efficiency_summary"] = {
-            "processing_speed": f"{stats['slides_per_second']:.2f} diapositivas/seg",
-            "token_rate": f"{stats['tokens_per_second']:.2f} tokens/seg",
-            "cache_efficiency": f"{stats['cache_hit_rate']:.1f}%",
-            "cost_efficiency": f"${stats['cost_per_1k_tokens']:.6f}/1K tokens"
-        }
-        
-        logger.info(f"Estadísticas: {stats}")
+        stats = _collect_translation_stats(editor, translator, start_time)
         
         # Almacenar resultado
         file_id_result = file_id or str(uuid.uuid4())
@@ -176,25 +112,106 @@ def process_translation_task(input_path: str, output_dir: str, source_lang: str,
                 "completion_time": time.time()
             }, f, ensure_ascii=False)
     finally:
-        # Limpiar archivos
-        if process_file and process_file.exists():
-            try:
-                process_file.unlink()
-            except Exception as e:
-                logger.error(f"Error al eliminar archivo de proceso: {str(e)}")
-        
-        # Eliminar temporales
-        if os.path.exists(input_path):
-            try:
-                os.unlink(input_path)
-            except Exception as e:
-                logger.error(f"Error al eliminar temporal: {str(e)}")
-                
-        if os.path.exists(output_dir):
-            try:
-                shutil.rmtree(output_dir)
-            except Exception as e:
-                logger.error(f"Error al eliminar directorio temporal: {str(e)}")
+        _cleanup_temp_files(process_file, input_path, output_dir)
+
+def _collect_translation_stats(editor, translator, start_time):
+    """Recopila estadísticas del proceso de traducción"""
+    stats = {
+        "slides_processed": getattr(editor, "slides_processed", 0),
+        "texts_translated": getattr(editor, "total_texts", 0),
+        "total_time": time.time() - start_time,
+        "api_calls": max(1, getattr(translator, "api_calls", 0)),
+        "rate_limit_retries": getattr(translator, "rate_limit_retries", 0),
+        "successful_retries": getattr(translator, "successful_retries", 0),
+        "errors": getattr(translator, "errors", 0),
+        "duplicates_avoided": getattr(translator, "duplicates_avoided", 0),
+        "cache_hits": getattr(translator, "cache_hits", 0),
+        "cache_misses": getattr(translator, "cache_misses", 0),
+        "input_tokens": getattr(translator, "total_input_tokens", 0),
+        "output_tokens": getattr(translator, "total_output_tokens", 0),
+        "cached_tokens": getattr(translator, "cached_tokens", 0),
+    }
+    
+    # Asegurar tokens mínimos si hay textos
+    if stats["texts_translated"] > 0 and stats["input_tokens"] == 0 and stats["cached_tokens"] == 0:
+        tokens_per_text = 25
+        if stats["cache_hits"] > 0:
+            stats["cached_tokens"] = stats["texts_translated"] * tokens_per_text
+        else:
+            stats["input_tokens"] = stats["texts_translated"] * tokens_per_text
+            stats["output_tokens"] = stats["texts_translated"] * tokens_per_text * 1.2
+    
+    # Calcular totales
+    stats["total_tokens"] = stats["input_tokens"] + stats["output_tokens"] + stats["cached_tokens"]
+    
+    # Calcular costos
+    input_cost = (stats["input_tokens"] / 1_000_000) * 3.75
+    cached_cost = (stats["cached_tokens"] / 1_000_000) * 1.875
+    output_cost = (stats["output_tokens"] / 1_000_000) * 15.0
+    total_cost = input_cost + cached_cost + output_cost
+    
+    stats["input_cost"] = input_cost
+    stats["cached_cost"] = cached_cost
+    stats["output_cost"] = output_cost
+    stats["total_cost"] = total_cost
+    
+    # Métricas adicionales
+    if stats["total_tokens"] > 0:
+        stats["cost_per_1k_tokens"] = (total_cost * 1000) / stats["total_tokens"]
+    else:
+        stats["cost_per_1k_tokens"] = 0
+    
+    stats["tokens_per_second"] = stats["total_tokens"] / max(0.1, stats["total_time"])
+    stats["slides_per_second"] = stats["slides_processed"] / max(0.1, stats["total_time"])
+    
+    # Métricas de caché
+    cache_total = stats["cache_hits"] + stats["cache_misses"]
+    stats["cache_hit_rate"] = (stats["cache_hits"] / cache_total) * 100 if cache_total > 0 else 0
+    
+    # Resumen global
+    stats["efficiency_summary"] = {
+        "processing_speed": f"{stats['slides_per_second']:.2f} diapositivas/seg",
+        "token_rate": f"{stats['tokens_per_second']:.2f} tokens/seg",
+        "cache_efficiency": f"{stats['cache_hit_rate']:.1f}%",
+        "cost_efficiency": f"${stats['cost_per_1k_tokens']:.6f}/1K tokens"
+    }
+    
+    return stats
+
+def _cleanup_temp_files(process_file, input_path, output_dir):
+    """Limpia archivos temporales del proceso de traducción"""
+    # Limpiar archivo de proceso
+    if process_file and process_file.exists():
+        try:
+            process_file.unlink()
+        except Exception as e:
+            logger.error(f"Error al eliminar archivo de proceso: {str(e)}")
+    
+    # Eliminar entrada temporal
+    if os.path.exists(input_path):
+        try:
+            os.unlink(input_path)
+        except Exception as e:
+            logger.error(f"Error al eliminar temporal: {str(e)}")
+            
+    # Eliminar directorio temporal
+    if os.path.exists(output_dir):
+        try:
+            shutil.rmtree(output_dir)
+        except Exception as e:
+            logger.error(f"Error al eliminar directorio temporal: {str(e)}")
+
+def _validate_translation_request(file, source_language, target_language):
+    """Valida los parámetros de una solicitud de traducción"""
+    if not file.filename or not file.filename.lower().endswith(".pptx"):
+        raise HTTPException(status_code=400, detail="El archivo debe ser PPTX")
+    
+    supported_languages = ["es", "en", "fr", "de", "it", "pt"]
+    if source_language not in supported_languages or target_language not in supported_languages:
+        raise HTTPException(status_code=400, detail="Idioma no soportado")
+    
+    if source_language == target_language:
+        raise HTTPException(status_code=400, detail="Los idiomas deben ser diferentes")
 
 @router.post("/upload-pptx-for-translation")
 async def upload_pptx_for_translation(
@@ -207,15 +224,7 @@ async def upload_pptx_for_translation(
         logger.info(f"Solicitud para traducir: {file.filename}, de {source_language} a {target_language}")
         
         # Validaciones
-        if not file.filename or not file.filename.lower().endswith(".pptx"):
-            raise HTTPException(status_code=400, detail="El archivo debe ser PPTX")
-        
-        supported_languages = ["es", "en", "fr", "de", "it", "pt"]
-        if source_language not in supported_languages or target_language not in supported_languages:
-            raise HTTPException(status_code=400, detail="Idioma no soportado")
-        
-        if source_language == target_language:
-            raise HTTPException(status_code=400, detail="Los idiomas deben ser diferentes")
+        _validate_translation_request(file, source_language, target_language)
         
         # Crear directorio y guardar archivo
         temp_dir = tempfile.mkdtemp()
@@ -273,7 +282,7 @@ async def upload_pptx_for_translation(
 @router.post("/process-translation")
 async def process_translation(
     background_tasks: BackgroundTasks,
-    request: Dict[str, Any]
+    request: dict
 ):
     """Inicia el proceso de traducción para un archivo previamente subido"""
     try:
@@ -448,12 +457,72 @@ async def download_translated_file(file_id: str, filename: str):
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
     )
 
-@router.post("/download-all")
-async def download_all_files(request: Dict[str, Any]):
-    """Crea un archivo ZIP con todos los archivos traducidos solicitados"""
-    zip_file_path = None
-    temp_dir = None
+def _create_zip_from_files(files_to_zip, zip_path):
+    """Crea un archivo ZIP con los archivos especificados"""
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for file_path, filename in files_to_zip:
+            zipf.write(file_path, filename)
+            logger.info(f"Añadido {filename} al ZIP")
     
+    # Verificar ZIP
+    if not zip_path.exists() or os.path.getsize(zip_path) == 0:
+        raise Exception("Error al crear ZIP")
+    
+    return zip_path
+
+def _get_files_for_zip(file_infos):
+    """Obtiene la lista de archivos para comprimir en ZIP"""
+    files_to_zip = []
+    for file_info in file_infos:
+        file_id = file_info.get("file_id")
+        filename = file_info.get("filename")
+        
+        if not file_id or not filename:
+            continue
+        
+        file_path = STORAGE_DIR / file_id / filename
+        
+        if file_path.exists():
+            files_to_zip.append((file_path, filename))
+            logger.info(f"Archivo encontrado: {file_path}")
+        else:
+            logger.warning(f"Archivo no encontrado: {file_path}")
+    
+    if not files_to_zip:
+        raise HTTPException(status_code=404, detail="Ningún archivo encontrado")
+    
+    return files_to_zip
+
+def _prepare_zip_response(zip_path):
+    """Prepara la respuesta con el archivo ZIP y programación de limpieza"""
+    temp_dir = zip_path.parent
+    
+    def cleanup_temp():
+        try:
+            if zip_path.exists():
+                os.unlink(zip_path)
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+        except Exception as e:
+            logger.error(f"Error en limpieza: {str(e)}")
+    
+    response = FileResponse(
+        path=zip_path,
+        filename="traducciones.zip",
+        media_type="application/zip"
+    )
+    
+    response.headers["Content-Disposition"] = "attachment; filename=traducciones.zip"
+    
+    # Programar limpieza
+    response.background = BackgroundTasks()
+    response.background.add_task(cleanup_temp)
+    
+    return response
+
+@router.post("/download-all")
+async def download_all_files(request: dict):
+    """Crea un archivo ZIP con todos los archivos traducidos solicitados"""
     try:
         logger.info(f"Request recibido: {request}")
         
@@ -473,82 +542,25 @@ async def download_all_files(request: Dict[str, Any]):
         logger.info(f"Solicitada descarga de {len(files)} archivos")
         
         # Verificar archivos
-        files_to_zip = []
-        for file_info in files:
-            file_id = file_info.get("file_id")
-            filename = file_info.get("filename")
-            
-            if not file_id or not filename:
-                continue
-            
-            file_path = STORAGE_DIR / file_id / filename
-            
-            if file_path.exists():
-                files_to_zip.append((file_path, filename))
-                logger.info(f"Archivo encontrado: {file_path}")
-            else:
-                logger.warning(f"Archivo no encontrado: {file_path}")
-        
-        if not files_to_zip:
-            raise HTTPException(status_code=404, detail="Ningún archivo encontrado")
+        files_to_zip = _get_files_for_zip(files)
         
         # Crear ZIP
-        temp_dir = tempfile.mkdtemp()
-        zip_file_path = Path(temp_dir) / "traducciones.zip"
+        temp_dir = Path(tempfile.mkdtemp())
+        zip_file_path = temp_dir / "traducciones.zip"
         
-        with zipfile.ZipFile(zip_file_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for file_path, filename in files_to_zip:
-                zipf.write(file_path, filename)
-                logger.info(f"Añadido {filename} al ZIP")
+        _create_zip_from_files(files_to_zip, zip_file_path)
         
-        # Verificar ZIP
-        if not zip_file_path.exists() or os.path.getsize(zip_file_path) == 0:
-            raise HTTPException(status_code=500, detail="Error al crear ZIP")
-        
-        # Función de limpieza
-        def cleanup_temp():
-            try:
-                if zip_file_path and zip_file_path.exists():
-                    os.unlink(zip_file_path)
-                if temp_dir and os.path.exists(temp_dir):
-                    shutil.rmtree(temp_dir)
-            except Exception as e:
-                logger.error(f"Error en limpieza: {str(e)}")
-        
-        # Preparar respuesta
-        response = FileResponse(
-            path=zip_file_path,
-            filename="traducciones.zip",
-            media_type="application/zip"
-        )
-        
-        response.headers["Content-Disposition"] = "attachment; filename=traducciones.zip"
-        
-        # Programar limpieza
-        response.background = BackgroundTasks()
-        response.background.add_task(cleanup_temp)
-        
-        return response
+        return _prepare_zip_response(zip_file_path)
             
+    except HTTPException:
+        raise
     except Exception as e:
-        # Limpiar en caso de error
-        try:
-            if zip_file_path and zip_file_path.exists():
-                os.unlink(zip_file_path)
-            if temp_dir and os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir)
-        except:
-            pass
-            
         logger.error(f"Error ZIP: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @router.get("/download-all-files")
 async def download_all_files_get(file_ids: str, filenames: str):
     """Endpoint alternativo para descargar múltiples archivos en ZIP"""
-    zip_file_path = None
-    temp_dir = None
-    
     try:
         # Parsear parámetros
         file_ids_list = file_ids.split(',') if file_ids else []
@@ -580,52 +592,15 @@ async def download_all_files_get(file_ids: str, filenames: str):
             raise HTTPException(status_code=404, detail="Ningún archivo encontrado")
         
         # Crear ZIP
-        temp_dir = tempfile.mkdtemp()
-        zip_file_path = Path(temp_dir) / "traducciones.zip"
+        temp_dir = Path(tempfile.mkdtemp())
+        zip_file_path = temp_dir / "traducciones.zip"
         
-        with zipfile.ZipFile(zip_file_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for file_path, filename in files_to_zip:
-                zipf.write(file_path, filename)
-                logger.info(f"Añadido {filename} al ZIP")
+        _create_zip_from_files(files_to_zip, zip_file_path)
         
-        # Verificar ZIP
-        if not zip_file_path.exists() or os.path.getsize(zip_file_path) == 0:
-            raise HTTPException(status_code=500, detail="Error al crear ZIP")
-        
-        # Función de limpieza
-        def cleanup_temp():
-            try:
-                if zip_file_path and zip_file_path.exists():
-                    os.unlink(zip_file_path)
-                if temp_dir and os.path.exists(temp_dir):
-                    shutil.rmtree(temp_dir)
-            except Exception as e:
-                logger.error(f"Error en limpieza: {str(e)}")
+        return _prepare_zip_response(zip_file_path)
                 
-        # Preparar respuesta
-        response = FileResponse(
-            path=zip_file_path,
-            filename="traducciones.zip",
-            media_type="application/zip"
-        )
-        
-        response.headers["Content-Disposition"] = "attachment; filename=traducciones.zip"
-        
-        # Programar limpieza
-        response.background = BackgroundTasks()
-        response.background.add_task(cleanup_temp)
-        
-        return response
-                
+    except HTTPException:
+        raise            
     except Exception as e:
-        # Limpiar en caso de error
-        try:
-            if zip_file_path and zip_file_path.exists():
-                os.unlink(zip_file_path)
-            if temp_dir and os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir)
-        except:
-            pass
-            
         logger.error(f"Error ZIP: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}") 
