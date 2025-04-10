@@ -1,0 +1,141 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+.venv/
+.env
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+.pnp/
+.pnp.js
+.next/
+out/
+.cache/
+
+# IDEs y editores
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+.cursor/
+
+# Archivos temporales y de datos
+tmp/
+temp/
+*.log
+*.bak
+logs/
+storage/*
+!storage/.gitkeep
+
+# Configuración local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+config/local/
+config/cache/
+
+# Distribución
+/build/
+/dist/
+
+# Archivos de prueba
+test-results/
+test-reports/
+coverage/
+
+# Frontend build
+frontend/dist
+frontend/.vite
+
+# Sistemas operativos
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Archivos de registro
+logs/
+*.log
+
+# Archivos temporales
+temp/
+tmp/
+.tmp/
+
+# Ignorar carpeta de datos
+/data/
+/data
+/backend/data/
+/backend/data
+/storage/
+/storage
+
+# Ignorar archivos del sistema macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Ignorar archivos de entorno
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Ignorar archivos de caché y temporales
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.so
+*.dylib
+
+# Ignorar archivos de IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Ignorar archivos de dependencias
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log backend/venv/
+frontend/node_modules/
