@@ -1,0 +1,388 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Poppins', system-ui, sans-serif;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Poppins', system-ui, sans-serif;
+    font-weight: 600;
+  }
+  
+  body {
+    @apply antialiased text-gray-800;
+  }
+  
+  button, 
+  input, 
+  select, 
+  textarea {
+    font-family: 'Poppins', system-ui, sans-serif;
+  }
+} 
+
+/* Estilos para sliders personalizados */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 0.5rem;
+  border-radius: 0.5rem;
+  outline: none;
+  background: #e5e7eb;
+  cursor: pointer;
+  width: 100%;
+  touch-action: manipulation;
+  margin: 0;
+  padding: 0;
+}
+
+/* Estilos para el thumb (la bolita que se arrastra) en Chrome, Safari, Opera */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: #c29e74;
+  cursor: grab;
+  border: 2px solid white;
+  margin-top: -0.375rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: background 0.2s ease, transform 0.1s ease;
+  z-index: 20;
+  position: relative;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  background: #a78559;
+  transform: scale(1.1);
+}
+
+input[type="range"]::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.2);
+}
+
+/* Estilos para Firefox */
+input[type="range"]::-moz-range-thumb {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: #c29e74;
+  cursor: grab;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: background 0.2s ease, transform 0.1s ease;
+  z-index: 20;
+  position: relative;
+}
+
+input[type="range"]::-moz-range-thumb:hover {
+  background: #a78559;
+  transform: scale(1.1);
+}
+
+input[type="range"]::-moz-range-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.2);
+}
+
+/* Estilos para la barra en Firefox */
+input[type="range"]::-moz-range-progress {
+  background-color: #c29e74;
+  height: 0.5rem;
+  border-radius: 0.5rem;
+}
+
+/* Estilos para el track en Firefox */
+input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 0.5rem;
+  background: #e5e7eb;
+  border-radius: 0.5rem;
+  border: none;
+}
+
+/* Estilos para Microsoft Edge e IE */
+input[type="range"]::-ms-thumb {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: #c29e74;
+  cursor: grab;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  margin-top: 0;
+  z-index: 20;
+  position: relative;
+}
+
+input[type="range"]::-ms-thumb:hover {
+  background: #a78559;
+}
+
+input[type="range"]::-ms-track {
+  width: 100%;
+  height: 0.5rem;
+  background: transparent;
+  border-color: transparent;
+  border-width: 0.5rem 0;
+  color: transparent;
+}
+
+input[type="range"]::-ms-fill-lower {
+  background-color: #c29e74;
+  height: 0.5rem;
+  border-radius: 0.5rem;
+}
+
+input[type="range"]::-ms-fill-upper {
+  background-color: #e5e7eb;
+  height: 0.5rem;
+  border-radius: 0.5rem;
+}
+
+/* Asegurar que el slider no se ve bloqueado en hover */
+input[type="range"]:hover {
+  opacity: 1;
+}
+
+/* Sobreescribir estilos de Tailwind que podrían interferir */
+.appearance-none::-webkit-slider-thumb {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+/* Estilos para botones, para mantener consistencia */
+button.bg-gradient-to-b.from-\[\#daaa7c\].to-\[\#c79b6d\]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Estilos específicos para los sliders de la herramienta de corte */
+.slider-container {
+  position: relative;
+  margin: 0;
+  padding: 8px 0;
+}
+
+.slider-start, .slider-end {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  outline: none;
+  background: #e5e7eb;
+  border-radius: 5px;
+  padding: 0;
+  margin: 0;
+}
+
+.slider-start::-webkit-slider-thumb, .slider-end::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #c29e74;
+  border: 2px solid white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.slider-start::-moz-range-thumb, .slider-end::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: #c29e74;
+  border: 2px solid white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+/* Aumentar el área de clic en dispositivos táctiles */
+@media (pointer: coarse) {
+  .slider-container {
+    padding: 12px 0;
+  }
+  
+  .slider-start::-webkit-slider-thumb, .slider-end::-webkit-slider-thumb {
+    width: 24px;
+    height: 24px;
+  }
+  
+  .slider-start::-moz-range-thumb, .slider-end::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+  }
+} 
+
+/* Estilos mejorados para ReactSlider */
+.horizontal-slider {
+  width: 100%;
+  height: 16px; /* Aumentar altura para facilitar interacción */
+  margin: 20px 0; /* Más espacio vertical */
+  cursor: pointer;
+  touch-action: none; /* Crucial para dispositivos táctiles */
+  position: relative;
+  display: flex;
+  align-items: center;
+  user-select: none;
+}
+
+.slider-track {
+  position: absolute;
+  height: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  left: 0;
+  right: 0;
+  z-index: 1;
+  border-radius: 4px;
+  background-color: #e5e7eb;
+}
+
+.slider-thumb {
+  position: absolute;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 26px !important;
+  height: 26px !important;
+  cursor: grab;
+  z-index: 100 !important; /* Asegurar que está por encima de todo */
+  background-color: #c29e74 !important;
+  border: 2px solid #ffffff !important;
+  border-radius: 50% !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3) !important;
+  outline: none !important;
+  user-select: none;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s ease, box-shadow 0.1s ease !important;
+}
+
+.slider-thumb:hover {
+  transform: translate(-50%, -50%) scale(1.1) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4) !important;
+}
+
+.slider-thumb:active {
+  cursor: grabbing;
+  transform: translate(-50%, -50%) scale(1.15) !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Asegurar compatibilidad con dispositivos táctiles */
+@media (pointer: coarse) {
+  .horizontal-slider {
+    height: 32px; /* Aún más espacio para dispositivos táctiles */
+  }
+  
+  .slider-thumb {
+    width: 32px !important;
+    height: 32px !important;
+    touch-action: none !important;
+  }
+} 
+
+/* Estilos para el slider de rango */
+.range-slider {
+  width: 100%;
+  height: 30px; /* Aumentar altura para mejorar interacción */
+  margin: 24px 0; 
+  cursor: pointer;
+  touch-action: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  user-select: none;
+  padding: 0 13px; /* Padding para garantizar que los thumbs estén dentro de los límites visibles */
+}
+
+.range-track {
+  position: absolute;
+  height: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  left: 13px; /* Alineado con el padding del slider */
+  right: 13px; /* Alineado con el padding del slider */
+  z-index: 1;
+  border-radius: 4px;
+  background-color: #e5e7eb;
+}
+
+/* Estilos mejorados para la sección activa entre los dos thumbs */
+.range-slider .range-track-1 {
+  background-color: #c29e74 !important;
+  height: 8px !important;
+}
+
+.range-thumb {
+  position: absolute;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 26px !important;
+  height: 26px !important;
+  cursor: grab !important;
+  z-index: 100 !important;
+  background-color: #c29e74 !important;
+  border: 3px solid #ffffff !important;
+  border-radius: 50% !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+  outline: none !important;
+  user-select: none;
+  touch-action: none;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: transform 0.1s ease, box-shadow 0.1s ease !important;
+}
+
+/* Ajustes específicos para los extremos */
+.range-thumb:first-child {
+  margin-left: 0; /* Asegurar que el primer thumb esté alineado al extremo izquierdo */
+}
+
+.range-thumb:last-child {
+  margin-right: 0; /* Asegurar que el último thumb esté alineado al extremo derecho */
+}
+
+.range-thumb:hover {
+  transform: translate(-50%, -50%) scale(1.1) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4) !important;
+}
+
+.range-thumb:active {
+  cursor: grabbing !important;
+  transform: translate(-50%, -50%) scale(1.15) !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Diferenciar visualmente los thumbs de inicio y fin */
+.range-thumb:nth-of-type(1) {
+  /* El primer thumb (inicio) */
+  background-color: #be8c5f !important;
+}
+
+.range-thumb:nth-of-type(2) {
+  /* El segundo thumb (final) */
+  background-color: #be8c5f !important;
+}
+
+/* Asegurar compatibilidad con dispositivos táctiles */
+@media (pointer: coarse) {
+  .range-slider {
+    height: 38px;
+  }
+  
+  .range-thumb {
+    width: 36px !important;
+    height: 36px !important;
+    border-width: 4px !important;
+  }
+} 

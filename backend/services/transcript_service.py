@@ -11,10 +11,10 @@ import warnings
 import logging
 from openai import OpenAI
 
-# Configurar logging
+# Evitar configurar el logger si ya está configurado
 logger = logging.getLogger("transcript")
-logger.setLevel(logging.INFO)
 if not logger.handlers:
+    logger.setLevel(logging.INFO)
     handler = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
@@ -26,6 +26,14 @@ os.environ["OMP_NUM_THREADS"] = "4"
 warnings.filterwarnings("ignore", category=UserWarning, module="torch.nn.modules.conv")
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
 
+# Configuración
+DEFAULT_CONFIG = {
+    "DEFAULT_MODEL": "gpt-4o-transcribe",
+    "DEFAULT_LANGUAGE": "es",
+    "DEFAULT_OUTPUT_FORMAT": "txt",
+    "DEFAULT_OUTPUT_DIR": "data/output/07_transcript"
+}
+
 class OutputFormat(Enum):
     JSON = "json"
     TXT = "txt"
@@ -33,6 +41,7 @@ class OutputFormat(Enum):
     ALL = "all"
 
 class Stats:
+    """Clase para seguimiento de estadísticas de transcripción."""
     def __init__(self):
         self.start_time = time.time()
         self.audio_duration = 0
@@ -45,6 +54,7 @@ class Stats:
         self.cost_per_minute = 0
 
     def get_summary(self) -> dict:
+        """Genera un resumen de las estadísticas de transcripción."""
         elapsed = time.time() - self.start_time
         minutes_transcribed = self.audio_duration / 60
         return {
@@ -63,6 +73,7 @@ class Stats:
         }
 
 def load_api_config() -> Dict:
+    """Carga la configuración de la API desde el archivo de configuración."""
     script_dir = Path(__file__).resolve().parent.parent
     config_paths = [
         script_dir / "config" / "sttapi.json",
@@ -73,16 +84,21 @@ def load_api_config() -> Dict:
             logger.info(f"Usando archivo de configuración: {config_path}")
             with open(config_path, "r", encoding="utf-8") as f:
                 return json.load(f)
+    
+    logger.error("No se encuentra el archivo de configuración")
     raise FileNotFoundError("No se encuentra el archivo de configuración en ninguna ruta probada")
 
 def verify_ffmpeg() -> bool:
+    """Verifica si FFmpeg está instalado en el sistema."""
     try:
         result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
         return result.returncode == 0
     except FileNotFoundError:
+        logger.warning("FFmpeg no encontrado en el sistema")
         return False
 
 def extract_audio(video_path: Path, temp_dir: Path) -> Optional[Path]:
+    """Extrae el audio de un archivo de vídeo."""
     try:
         audio_path = temp_dir / f"{video_path.stem}_audio.mp3"
         cmd = [
@@ -95,20 +111,27 @@ def extract_audio(video_path: Path, temp_dir: Path) -> Optional[Path]:
             "-ar", "16000",
             str(audio_path)
         ]
+        logger.info(f"Extrayendo audio de {video_path}")
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             logger.error(f"Error extrayendo audio: {result.stderr}")
             return None
+        
+        logger.info(f"Audio extraído correctamente: {audio_path}")
         return audio_path
     except Exception as e:
         logger.error(f"Error extrayendo audio: {str(e)}")
         return None
 
 def find_video_files(directory: Path) -> List[Path]:
+    """Encuentra archivos de vídeo en un directorio."""
     video_extensions = [".mp4", ".avi", ".mkv", ".mov", ".webm"]
-    return sorted([f for f in directory.glob("*") if f.suffix.lower() in video_extensions])
+    files = sorted([f for f in directory.glob("*") if f.suffix.lower() in video_extensions])
+    logger.info(f"Encontrados {len(files)} archivos de vídeo en {directory}")
+    return files
 
 def reconstruct_sentences(segments: List[Dict]) -> List[Dict]:
+    """Reconstruye oraciones a partir de segmentos de transcripción."""
     if not segments:
         return []
     
@@ -153,31 +176,43 @@ def reconstruct_sentences(segments: List[Dict]) -> List[Dict]:
     return processed_segments
 
 def format_timestamp(seconds: float) -> str:
+    """Formatea un tiempo en segundos a minutos:segundos.milisegundos."""
     minutes = int(seconds // 60)
     secs = seconds % 60
     return f"{minutes}:{secs:06.3f}"
 
 def calculate_api_cost(audio_duration: float, model: str = "gpt-4o-transcribe") -> Dict:
-    config = load_api_config()
-    models_info = config.get("documentation", {}).get("models", {})
-    
-    result = {
-        "cost": 0,
-        "cost_per_minute": 0,
-        "model_name": model,
-        "minutes": audio_duration / 60
-    }
-    
-    if model in models_info:
-        model_info = models_info[model]
-        cost_per_minute = model_info.get("pricing", {}).get("transcription", {}).get("cost_per_minute", 0)
-        result["cost_per_minute"] = cost_per_minute
-        result["model_description"] = model_info.get("description", "")
-        result["cost"] = result["minutes"] * cost_per_minute
-    
-    return result
+    """Calcula el costo estimado de la transcripción en base a la duración del audio."""
+    try:
+        config = load_api_config()
+        models_info = config.get("documentation", {}).get("models", {})
+        
+        result = {
+            "cost": 0,
+            "cost_per_minute": 0,
+            "model_name": model,
+            "minutes": audio_duration / 60
+        }
+        
+        if model in models_info:
+            model_info = models_info[model]
+            cost_per_minute = model_info.get("pricing", {}).get("transcription", {}).get("cost_per_minute", 0)
+            result["cost_per_minute"] = cost_per_minute
+            result["model_description"] = model_info.get("description", "")
+            result["cost"] = result["minutes"] * cost_per_minute
+        
+        return result
+    except Exception as e:
+        logger.warning(f"Error calculando costo API: {str(e)}")
+        return {
+            "cost": 0,
+            "cost_per_minute": 0,
+            "model_name": model,
+            "minutes": audio_duration / 60
+        }
 
 def estimate_audio_duration(audio_path: Path) -> float:
+    """Estima la duración de un archivo de audio usando ffprobe."""
     try:
         cmd = [
             "ffprobe", 
@@ -188,12 +223,15 @@ def estimate_audio_duration(audio_path: Path) -> float:
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode == 0:
-            return float(result.stdout.strip())
+            duration = float(result.stdout.strip())
+            logger.info(f"Duración estimada: {duration:.2f}s")
+            return duration
     except Exception as e:
         logger.warning(f"Advertencia al estimar duración: {str(e)}")
     return 0.0
 
 def format_text_by_sentences(text: str) -> str:
+    """Formatea el texto dividiendo en oraciones separadas por saltos de línea."""
     text = re.sub(r'\s+', ' ', text).strip()
     text = re.sub(r'([.!?])\s+(?=[A-ZÁÉÍÓÚÑ])', r'\1\n', text)
     if re.search(r'[.!?]$', text) and not text.endswith('\n'):
@@ -201,6 +239,7 @@ def format_text_by_sentences(text: str) -> str:
     return text
 
 def export_results(segments: List[Dict], output_dir: Path, filename: str, formats: List[str]) -> Dict[str, Path]:
+    """Exporta los resultados de la transcripción en los formatos especificados."""
     output_dir.mkdir(parents=True, exist_ok=True)
     result_files = {}
     
@@ -239,29 +278,36 @@ def transcribe_with_openai(
     prompt: str = None,
     response_format: str = "text"
 ) -> Any:
-    config = load_api_config()
-    api_key = config.get("stt", {}).get("api_key")
-    
-    if not api_key:
-        raise ValueError("API key no encontrada en la configuración")
-    
-    client = OpenAI(api_key=api_key)
-    industry_prompt = "Transcribe como experto en cartón ondulado usando terminología AFCO. Optimiza el texto para síntesis de voz (TTS) con claridad, naturalidad y precisión técnica. Redacta para ser locutado sin edición posterior."
-    
-    with open(audio_path, "rb") as audio_file:
-        params = {
-            "model": model,
-            "file": audio_file,
-            "response_format": response_format
-        }
+    """Transcribe un archivo de audio usando la API de OpenAI."""
+    try:
+        config = load_api_config()
+        api_key = config.get("stt", {}).get("api_key")
         
-        if language:
-            params["language"] = language
+        if not api_key:
+            logger.error("API key no encontrada en la configuración")
+            raise ValueError("API key no encontrada en la configuración")
         
-        final_prompt = prompt if prompt else industry_prompt
-        params["prompt"] = final_prompt
+        logger.info(f"Iniciando transcripción con modelo {model}")
+        client = OpenAI(api_key=api_key)
+        industry_prompt = "Transcribe como experto en cartón ondulado usando terminología AFCO. Optimiza el texto para síntesis de voz (TTS) con claridad, naturalidad y precisión técnica. Redacta para ser locutado sin edición posterior."
+        
+        with open(audio_path, "rb") as audio_file:
+            params = {
+                "model": model,
+                "file": audio_file,
+                "response_format": response_format
+            }
             
-        return client.audio.transcriptions.create(**params)
+            if language:
+                params["language"] = language
+            
+            final_prompt = prompt if prompt else industry_prompt
+            params["prompt"] = final_prompt
+                
+            return client.audio.transcriptions.create(**params)
+    except Exception as e:
+        logger.error(f"Error en transcripción con OpenAI: {str(e)}")
+        raise
 
 def transcribe_video(
     video_path: Union[str, Path],
@@ -271,32 +317,56 @@ def transcribe_video(
     original_name: Optional[str] = None,
     silent: bool = False
 ) -> Dict:
+    """
+    Función principal para transcribir un vídeo a texto.
+    
+    Args:
+        video_path: Ruta al archivo de vídeo
+        output_dir: Directorio de salida para guardar la transcripción
+        model_name: Modelo de OpenAI a utilizar
+        formats: Formatos de salida ("txt", "json", "md", "all")
+        original_name: Nombre original del archivo
+        silent: Si es True, no muestra mensajes de log
+        
+    Returns:
+        Dict con el texto transcrito, segmentos, estadísticas y archivos generados
+    """
     video_path = Path(video_path)
     if not video_path.exists():
+        logger.error(f"No se encuentra el vídeo: {video_path}")
         raise FileNotFoundError(f"No se encuentra el vídeo: {video_path}")
 
     with tempfile.TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)
         
+        # Configurar directorio de salida
         if output_dir is None:
-            output_dir = Path("data/output/07_transcript")
+            output_dir = Path(DEFAULT_CONFIG["DEFAULT_OUTPUT_DIR"])
             output_dir.mkdir(parents=True, exist_ok=True)
         
         output_name = original_name if original_name else video_path.stem
+        logger.info(f"Iniciando transcripción de {video_path}")
         logger.info(f"Usando nombre de salida: {output_name}")
+        logger.info(f"Directorio de salida: {output_dir}")
         
+        # Inicializar estadísticas y resultados
         stats = Stats()
         stats.model_name = model_name
         results = {"filename": video_path.name, "segments": [], "stats": {}}
 
+        # Verificar dependencias
         if not verify_ffmpeg():
+            logger.error("FFmpeg no está instalado")
             raise RuntimeError("FFmpeg no está instalado. Instálalo para continuar.")
 
+        # Extraer audio
         logger.info("Extrayendo audio...")
         audio_path = extract_audio(video_path, temp_dir)
         if not audio_path:
+            logger.error("Fallo en extracción de audio")
             raise RuntimeError("Fallo en extracción de audio")
         
+        # Estimar duración y costo
         audio_duration = estimate_audio_duration(audio_path)
         stats.audio_duration = audio_duration
         
@@ -309,78 +379,89 @@ def transcribe_video(
         logger.info(f"Coste por minuto: {stats.cost_per_minute:.4f}€")
         logger.info(f"Coste estimado total: {estimated_cost:.4f}€")
         
+        # Realizar transcripción
         logger.info(f"Transcribiendo con {model_name}...")
-        response = transcribe_with_openai(
-            audio_path=audio_path,
-            model=model_name,
-            language="es",
-            prompt="Eres un redactor técnico especializado en la industria del cartón ondulado, con dominio del vocabulario AFCO. Optimiza el texto para síntesis de voz con claridad, naturalidad y precisión técnica.",
-            response_format="text"
-        )
+        try:
+            response = transcribe_with_openai(
+                audio_path=audio_path,
+                model=model_name,
+                language="es",
+                prompt="Eres un redactor técnico especializado en la industria del cartón ondulado, con dominio del vocabulario AFCO. Optimiza el texto para síntesis de voz con claridad, naturalidad y precisión técnica.",
+                response_format="text"
+            )
 
-        text = str(response)
-        formatted_text = format_text_by_sentences(text)
-        lines = formatted_text.strip().split('\n')
-        segments = []
-        
-        total_duration = stats.audio_duration
-        segment_duration = total_duration / len(lines) if lines else total_duration
-        
-        for i, line in enumerate(lines):
-            if not line.strip():
-                continue
-                
-            start_time = i * segment_duration
-            end_time = (i + 1) * segment_duration if i < len(lines) - 1 else total_duration
+            text = str(response)
+            formatted_text = format_text_by_sentences(text)
+            lines = formatted_text.strip().split('\n')
+            segments = []
             
-            segments.append({
-                'id': i,
-                'start': start_time,
-                'end': end_time,
-                'text': line.strip()
-            })
-        
-        stats.segments = len(segments)
-        stats.words = len(text.split())
-        stats.chars = len(text)
-        
-        cost_info = calculate_api_cost(stats.audio_duration, model_name)
-        stats.api_cost = cost_info["cost"]
-        
-        txt_path = output_dir / f"{output_name}.txt"
-        with open(txt_path, 'w', encoding='utf-8') as f:
-            f.write(formatted_text)
-        
-        logger.info(f"Transcripción guardada en: {txt_path}")
-        output_files = {"txt": txt_path}
-        
-        if "json" in formats or "all" in formats:
-            json_path = output_dir / f"{output_name}.json"
-            with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump({
-                    "text": formatted_text,
-                    "segments": segments,
-                    "stats": stats.get_summary()
-                }, f, ensure_ascii=False, indent=2)
-            output_files["json"] = json_path
+            total_duration = stats.audio_duration
+            segment_duration = total_duration / len(lines) if lines else total_duration
+            
+            # Crear segmentos de transcripción
+            for i, line in enumerate(lines):
+                if not line.strip():
+                    continue
+                    
+                start_time = i * segment_duration
+                end_time = (i + 1) * segment_duration if i < len(lines) - 1 else total_duration
                 
-        if "md" in formats or "all" in formats:
-            md_path = output_dir / f"{output_name}.md"
-            with open(md_path, 'w', encoding='utf-8') as f:
-                f.write(f"# Transcripción: {video_path.stem}\n\n")
-                for segment in segments:
-                    f.write(f"{segment['text']}\n\n")
-                f.write("\n\n## Estadísticas de la transcripción\n\n")
+                segments.append({
+                    'id': i,
+                    'start': start_time,
+                    'end': end_time,
+                    'text': line.strip()
+                })
+            
+            # Actualizar estadísticas
+            stats.segments = len(segments)
+            stats.words = len(text.split())
+            stats.chars = len(text)
+            
+            cost_info = calculate_api_cost(stats.audio_duration, model_name)
+            stats.api_cost = cost_info["cost"]
+            
+            # Guardar resultados
+            txt_path = output_dir / f"{output_name}.txt"
+            with open(txt_path, 'w', encoding='utf-8') as f:
+                f.write(formatted_text)
+            
+            logger.info(f"Transcripción guardada en: {txt_path}")
+            output_files = {"txt": txt_path}
+            
+            # Exportar en formatos adicionales
+            if "json" in formats or "all" in formats:
+                json_path = output_dir / f"{output_name}.json"
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    json.dump({
+                        "text": formatted_text,
+                        "segments": segments,
+                        "stats": stats.get_summary()
+                    }, f, ensure_ascii=False, indent=2)
+                output_files["json"] = json_path
+                    
+            if "md" in formats or "all" in formats:
+                md_path = output_dir / f"{output_name}.md"
+                with open(md_path, 'w', encoding='utf-8') as f:
+                    f.write(f"# Transcripción: {video_path.stem}\n\n")
+                    for segment in segments:
+                        f.write(f"{segment['text']}\n\n")
+                    f.write("\n\n## Estadísticas de la transcripción\n\n")
+                    for key, value in stats.get_summary().items():
+                        f.write(f"- **{key}**: {value}\n")
+                output_files["md"] = md_path
+            
+            # Mostrar estadísticas
+            if not silent:
                 for key, value in stats.get_summary().items():
-                    f.write(f"- **{key}**: {value}\n")
-            output_files["md"] = md_path
-        
-        if not silent:
-            for key, value in stats.get_summary().items():
-                logger.info(f"✓ {key}: {value}")
-            
-        results["text"] = formatted_text
-        results["segments"] = segments
-        results["stats"] = stats.get_summary()
-        results["files"] = output_files
-        return results 
+                    logger.info(f"✓ {key}: {value}")
+                
+            # Preparar resultado
+            results["text"] = formatted_text
+            results["segments"] = segments
+            results["stats"] = stats.get_summary()
+            results["files"] = output_files
+            return results
+        except Exception as e:
+            logger.error(f"Error en el proceso de transcripción: {str(e)}")
+            raise 

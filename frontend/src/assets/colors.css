@@ -1,0 +1,59 @@
+/* Paleta de colores primarios (marrones) */
+
+:root {
+  /* El color principal */
+  --primary-base: #81694c;
+
+  /* Escala de marrones - del más claro al más oscuro */
+  --primary-50: #f8f6f4;  /* Marfil - muy claro */
+  --primary-100: #ebe6df; /* Beige claro */
+  --primary-200: #d8cdc1; /* Beige */
+  --primary-300: #c2af9d; /* Beige oscuro */
+  --primary-400: #aa947c; /* Marrón café con leche */
+  --primary-500: #81694c; /* Marrón medio (color base) */
+  --primary-600: #735d45; /* Marrón oscuro */
+  --primary-700: #5f4c3a; /* Marrón oscuro profundo */
+  --primary-800: #4e3e30; /* Marrón chocolate */
+  --primary-900: #41352a; /* Marrón casi negro */
+  --primary-950: #231c16; /* Marrón negro */
+
+  /* Variables para gradientes */
+  --gradient-primary: linear-gradient(to right, var(--primary-500), var(--primary-600));
+  --gradient-primary-hover: linear-gradient(to right, var(--primary-600), var(--primary-700));
+  --gradient-secondary: linear-gradient(to bottom, var(--primary-700), var(--primary-800));
+  
+  /* Sombras */
+  --shadow-sm: 0 2px 4px rgba(35, 28, 22, 0.06);
+  --shadow-md: 0 4px 8px rgba(35, 28, 22, 0.08);
+  --shadow-lg: 0 10px 15px rgba(35, 28, 22, 0.1);
+  --shadow-xl: 0 15px 25px rgba(35, 28, 22, 0.12);
+}
+
+/* Paleta extendida de marrones cálidos */
+.warm-browns {
+  --warm-brown-1: #e6d2b5; /* Beige cálido */
+  --warm-brown-2: #d9bc91; /* Beige dorado */
+  --warm-brown-3: #c49e6c; /* Beige dorado oscuro */
+  --warm-brown-4: #b58b4c; /* Marrón dorado */
+  --warm-brown-5: #9c7a43; /* Marrón miel */
+}
+
+/* Paleta de marrones fríos */
+.cool-browns {
+  --cool-brown-1: #d9c5b4; /* Taupe claro */
+  --cool-brown-2: #b4a594; /* Taupe */
+  --cool-brown-3: #8c7b6b; /* Taupe oscuro */
+  --cool-brown-4: #6e5f50; /* Gris marrón */
+  --cool-brown-5: #514538; /* Gris marrón oscuro */
+}
+
+/* Variantes especiales */
+.special-browns {
+  --cappuccino: #b38b6d;    /* Marrón cappuccino */
+  --mocha: #93806c;         /* Marrón mocha */
+  --coffee: #6f4e37;        /* Marrón café */
+  --chocolate: #7b3f00;     /* Marrón chocolate */
+  --caramel: #c19a6b;       /* Marrón caramelo */
+  --hazelnut: #ae8964;      /* Marrón avellana */
+  --cinnamon: #966842;      /* Marrón canela */
+} 

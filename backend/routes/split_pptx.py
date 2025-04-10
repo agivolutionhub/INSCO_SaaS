@@ -1,8 +1,13 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
-import tempfile, os, shutil, uuid, logging, json
+import tempfile
+import os
+import shutil
+import uuid
+import logging
+import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 # Importar el servicio de PPTX
 from services.pptx_service import split_presentation
@@ -16,9 +21,10 @@ STORAGE_DIR.mkdir(exist_ok=True, parents=True)
 # Configurar logging
 logger = logging.getLogger("split_pptx")
 logger.setLevel(logging.DEBUG)
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-logger.addHandler(handler)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    logger.addHandler(handler)
 
 def save_to_storage(file_path: str) -> str:
     """Guarda un archivo en almacenamiento permanente y devuelve su ID"""
@@ -74,8 +80,10 @@ def process_pptx_task(input_path: str, output_dir: str, slides_per_chunk: int, j
     finally:
         # Limpiar archivos temporales
         try:
-            os.path.exists(input_path) and os.unlink(input_path)
-            os.path.exists(output_dir) and shutil.rmtree(output_dir)
+            if os.path.exists(input_path):
+                os.unlink(input_path)
+            if os.path.exists(output_dir):
+                shutil.rmtree(output_dir)
         except Exception as e:
             logger.error(f"Error limpiando temporales: {str(e)}")
 
