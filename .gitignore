@@ -49,8 +49,19 @@ temp/
 *.log
 *.bak
 logs/
-storage/*
-!storage/.gitkeep
+
+# Carpetas de almacenamiento y datos
+/storage/
+!/storage/.gitkeep
+!/storage/transcripts/.gitkeep
+!/storage/audio/.gitkeep
+!/storage/snapshots/.gitkeep
+/data/
+/backend/data/
+/backend/storage/*
+!/backend/storage/.gitkeep
+!/backend/storage/audio/.gitkeep
+!/backend/storage/transcripts/.gitkeep
 
 # Configuración local
 .env.local
@@ -86,14 +97,6 @@ logs/
 temp/
 tmp/
 .tmp/
-
-# Ignorar carpeta de datos
-/data/
-/data
-/backend/data/
-/backend/data
-/storage/
-/storage
 
 # Ignorar archivos del sistema macOS
 .DS_Store
