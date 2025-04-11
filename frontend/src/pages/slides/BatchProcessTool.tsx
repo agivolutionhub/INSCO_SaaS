@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 const BatchProcessTool = () => {
   const [selectedDirectory, setSelectedDirectory] = useState<string>('');
-  const [availableFolders, setAvailableFolders] = useState([
+  const availableFolders = [
     'WEBINARS',
     'CURSOS',
     'EJEMPLOS'
-  ]);
+  ];
 
   return (
     <div className="p-8">

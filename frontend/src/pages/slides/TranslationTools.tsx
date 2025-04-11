@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { FaUpload, FaCog, FaDownload, FaCheckCircle, FaExclamationTriangle, FaLanguage, FaFileArchive } from 'react-icons/fa';
+import { FaUpload, FaCog, FaDownload, FaCheckCircle, FaExclamationTriangle, FaFileArchive } from 'react-icons/fa';
 import { MdGTranslate } from 'react-icons/md';
 
 // URL base para las solicitudes API

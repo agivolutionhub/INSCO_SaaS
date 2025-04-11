@@ -1,4 +1,3 @@
-import React from 'react';
 import VideoMontageTool from "../../components/video/VideoMontageTool";
 import { Helmet } from "react-helmet";
 

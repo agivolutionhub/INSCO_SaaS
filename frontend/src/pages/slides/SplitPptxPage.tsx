@@ -1,4 +1,3 @@
-import React from 'react';
 import SplitPptx from '../../components/SplitPptx';
 
 const SplitPptxPage = () => {

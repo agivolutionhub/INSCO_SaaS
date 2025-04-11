@@ -17,6 +17,7 @@ BASE_WAIT = 2.0
 MAX_WAIT = 30.0
 BACKOFF = 2.0
 ASSISTANT_ID = os.environ.get("OPENAI_ASSISTANT_ID", "asst_mBShBt93TIVI0PKE7zsNO0eZ")
+OPENAI_BETA_HEADER = {"OpenAI-Beta": "assistants=v2"}
 
 class TranslationCache:
     def __init__(self):
@@ -89,7 +90,11 @@ class Translator:
     
     def _test_connection(self):
         try:
-            self.current_thread = self.client.beta.threads.create()
+            self.current_thread = self.client.beta.threads.create(
+                extra_headers=OPENAI_BETA_HEADER
+            )
+            
+            # Comprobación usando el asistente
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
@@ -199,42 +204,88 @@ class Translator:
     def _translate_single_batch(self, texts):
         if not texts: return {}
         
-        system_prompt = self._get_translation_prompt()
+        # Preparar la instrucción y el contenido
+        instructions = self._get_translation_prompt()
         user_content = "TEXTOS:\n" + "\n".join(f"[{i}] {text}" for i, text in enumerate(texts, 1))
         
-        prompt_tokens = self._estimate_tokens(system_prompt) + self._estimate_tokens(user_content)
         retries, wait_time = 0, BASE_WAIT
         
         while retries <= MAX_RETRIES:
             try:
-                response = self.client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_content}
-                    ],
-                    temperature=0.3,
-                    max_tokens=2000
+                # Crear un thread nuevo
+                thread = self.client.beta.threads.create(
+                    extra_headers=OPENAI_BETA_HEADER
+                )
+                print(f"Thread creado: {thread.id}")
+                
+                # Añadir mensaje al thread
+                self.client.beta.threads.messages.create(
+                    thread_id=thread.id,
+                    role="user",
+                    content=f"{instructions}\n\n{user_content}",
+                    extra_headers=OPENAI_BETA_HEADER
                 )
                 
-                if not response or not response.choices:
-                    raise Exception("No se recibió respuesta")
+                # Ejecutar el asistente
+                run = self.client.beta.threads.runs.create(
+                    thread_id=thread.id,
+                    assistant_id=ASSISTANT_ID,
+                    extra_headers=OPENAI_BETA_HEADER
+                )
+                print(f"Ejecución iniciada: {run.id}")
                 
-                response_text = response.choices[0].message.content
+                # Esperar a que termine la ejecución
+                while run.status in ["queued", "in_progress"]:
+                    print(f"Estado: {run.status}")
+                    time.sleep(1)
+                    run = self.client.beta.threads.runs.retrieve(
+                        thread_id=thread.id,
+                        run_id=run.id,
+                        extra_headers=OPENAI_BETA_HEADER
+                    )
+                
+                # Verificar si se completó correctamente
+                if run.status != "completed":
+                    error_msg = f"Error en la traducción. Estado final: {run.status}"
+                    if hasattr(run, "last_error"):
+                        error_msg += f" - Detalle: {run.last_error}"
+                    print(error_msg)
+                    raise RuntimeError(error_msg)
+                
+                # Obtener mensajes
+                messages = self.client.beta.threads.messages.list(
+                    thread_id=thread.id,
+                    extra_headers=OPENAI_BETA_HEADER
+                )
+                
+                # Encontrar la respuesta del asistente
+                response_text = ""
+                for msg in messages.data:
+                    if msg.role == "assistant":
+                        for content in msg.content:
+                            if content.type == "text":
+                                response_text += content.text.value
+                
                 if not response_text:
-                    raise Exception("Respuesta sin texto")
+                    raise RuntimeError("No se recibió traducción del asistente")
                 
+                # Gestionar reintentos exitosos
                 if retries > 0:
                     self.stats["retry_success"] += 1
                     print(f"✓ Reintento exitoso después de {retries} intentos")
                 
+                # Parsear la respuesta
                 translations = self._parse_translation_response(response_text, texts)
                 
+                # Actualizar estadísticas
                 self.stats["texts"] += len(texts)
                 self.stats["calls"] += 1
                 
-                self.token_stats["input_tokens"] += response.usage.prompt_tokens
-                self.token_stats["output_tokens"] += response.usage.completion_tokens
+                # Estimar tokens (no podemos obtenerlos directamente)
+                input_tokens = self._estimate_tokens(instructions) + self._estimate_tokens(user_content)
+                output_tokens = self._estimate_tokens(response_text)
+                self.token_stats["input_tokens"] += input_tokens
+                self.token_stats["output_tokens"] += output_tokens
                 
                 return translations
                 
@@ -258,7 +309,7 @@ class Translator:
         """Obtiene el prompt de sistema para la traducción"""
         return f"""Eres un traductor profesional especializado en la industria del cartón ondulado.
 Traduce los siguientes textos del español al {self.target_language}.
-Responde solo con la traducción de cada texto, manteniendo la numeración original.
+Responde solo con la traducción de cada texto, manteniendo la numeración original en formato [número] texto_traducido.
 No expliques ni comentes tus traducciones. No añadas información adicional.
 Respeta el formato y la estructura del texto original."""
     

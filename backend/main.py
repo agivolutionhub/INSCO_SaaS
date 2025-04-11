@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from pathlib import Path
 import sys, os
@@ -12,6 +13,11 @@ import zipfile
 import time
 from typing import List, Dict, Optional, Any
 from rich.console import Console
+from dotenv import load_dotenv
+
+# Cargar variables de entorno desde .env
+env_path = Path(__file__).resolve().parent / "config" / ".env"
+load_dotenv(dotenv_path=env_path)
 
 # Consola para logs
 console = Console()
@@ -26,8 +32,8 @@ sys.path.insert(0, str(BASE_DIR))
 from services.autofit_service import procesar_pptx, procesar_lote
 from scripts.snapshot import extract_pptx_slides
 from services.transcript_service import transcribe_video
-from scripts.video_cut import cut_video, format_time_for_ffmpeg
-from scripts.video_montage import generate_video_montage
+from services.video_service import cut_video
+from services.video_montage_service import generate_video_montage
 from scripts.text_to_speech import generate_speech_from_file
 
 # Importar routers
@@ -37,18 +43,50 @@ from routes.snapshot import router as snapshot_router
 from routes.autofit import router as autofit_router
 from routes.transcript import router as transcript_router
 from routes.text_to_speech import router as text_to_speech_router
+from routes.video_cut import router as video_cut_router
+from routes.video_montage import router as video_montage_router
+from routes.video_translate import router as video_translate_router
 
 # Crear una instancia de FastAPI
-app = FastAPI(title="INSCO API")
+app = FastAPI(title="INSCO API", description="API para el proyecto INSCO")
 
 # Configurar CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Frontend Vite
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Obtener directorio base
+BASE_DIR = Path(__file__).resolve().parent
+
+# Directorios de almacenamiento
+UPLOAD_DIR = BASE_DIR / "tmp/uploads"
+PROCESSED_DIR = BASE_DIR / "tmp/processed"
+CAPTURES_DIR = BASE_DIR / "tmp/captures"
+AUDIO_DIR = BASE_DIR / "tmp/audio"
+TRANSCRIPTS_DIR = BASE_DIR / "storage/transcripts"
+VIDEO_DIR = BASE_DIR / "tmp/videos"
+AUDIO_OUTPUT_DIR = BASE_DIR / "storage/audio"
+AUTOFIT_DIR = BASE_DIR / "storage/autofit"
+TRANSLATIONS_DIR = BASE_DIR / "storage/translations"
+
+# Crear directorios
+for directory in [UPLOAD_DIR, PROCESSED_DIR, CAPTURES_DIR, AUDIO_DIR, 
+                 TRANSCRIPTS_DIR, VIDEO_DIR, AUDIO_OUTPUT_DIR, AUTOFIT_DIR,
+                 TRANSLATIONS_DIR]:
+    directory.mkdir(parents=True, exist_ok=True)
+    console.print(f"Directorio creado: {directory}")
+
+# Verificar configuración de OpenAI
+console.print(f"OpenAI API Key configurada: {bool(os.getenv('OPENAI_API_KEY'))}")
+console.print(f"OpenAI Assistant ID configurado: {bool(os.getenv('OPENAI_ASSISTANT_ID'))}")
+
+# Montar directorios estáticos
+app.mount("/tmp", StaticFiles(directory=BASE_DIR / "tmp"), name="temp")
+app.mount("/storage", StaticFiles(directory=BASE_DIR / "storage"), name="storage")
 
 # Incluir routers
 app.include_router(translate_pptx_router)
@@ -57,24 +95,13 @@ app.include_router(snapshot_router)
 app.include_router(autofit_router)
 app.include_router(transcript_router)
 app.include_router(text_to_speech_router)
-
-# Crear directorios temporales para archivos subidos y procesados
-UPLOAD_DIR = BASE_DIR / "tmp/uploads"
-PROCESSED_DIR = BASE_DIR / "tmp/processed"
-CAPTURES_DIR = BASE_DIR / "tmp/captures"
-AUDIO_DIR = BASE_DIR / "tmp/audio"
-TRANSCRIPTS_DIR = BASE_DIR / "storage/transcripts"
-VIDEO_DIR = BASE_DIR / "tmp/videos"
-AUDIO_OUTPUT_DIR = BASE_DIR / "storage/audio"
-
-# Crear directorios
-for directory in [UPLOAD_DIR, PROCESSED_DIR, CAPTURES_DIR, AUDIO_DIR, 
-                 TRANSCRIPTS_DIR, VIDEO_DIR, AUDIO_OUTPUT_DIR]:
-    directory.mkdir(parents=True, exist_ok=True)
+app.include_router(video_cut_router)
+app.include_router(video_montage_router)
+app.include_router(video_translate_router)
 
 @app.get("/")
 async def root():
-    return {"message": "INSCO API está funcionando"}
+    return {"message": "Bienvenido a la API de INSCO"}
 
 # Endpoints específicos para transcripción de video
 @app.post("/api/upload-video-for-transcription")
@@ -249,7 +276,7 @@ async def download_transcript(job_id: str, filename: str):
         # Buscar en múltiples ubicaciones posibles
         possible_paths = [
             TRANSCRIPTS_DIR / job_id / filename,  # Estructura job_id/filename
-            TRANSCRIPTS_DIR / filename,           # Directamente en TRANSCRIPTS_DIR
+            TRANSCRIPTS_DIR / filename,           # Directamente en storage/transcripts
         ]
         
         # Buscar en todas las ubicaciones posibles
@@ -488,13 +515,30 @@ async def process_captures(file_id: str = Form(...), original_name: str = Form(N
 
 @app.get("/api/download/{filename}")
 async def download_file(filename: str):
+    """Endpoint para descargar archivos procesados."""
     file_path = PROCESSED_DIR / filename
+    
+    # Si no está en PROCESSED_DIR, buscar en VIDEO_DIR
+    if not file_path.exists():
+        file_path = VIDEO_DIR / filename
+        
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
     
+    # Determinar el tipo MIME basado en la extensión
+    extension = file_path.suffix.lower()
+    media_type = "application/octet-stream"  # Por defecto
+    
+    if extension == ".pptx":
+        media_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    elif extension in [".mp4", ".avi", ".mov"]:
+        media_type = "video/mp4"
+    elif extension in [".mp3", ".wav"]:
+        media_type = "audio/mpeg"
+    
     return FileResponse(
         path=file_path,
-        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        media_type=media_type,
         filename=filename
     )
 

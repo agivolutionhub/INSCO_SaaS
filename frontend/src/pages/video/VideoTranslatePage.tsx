@@ -1,4 +1,3 @@
-import React from 'react';
 import VideoTranslateTool from "../../components/video/VideoTranslateTool";
 import ToolLayout from "../../components/layouts/ToolLayout";
 

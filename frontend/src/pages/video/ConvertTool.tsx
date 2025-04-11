@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 const ConvertTool = () => {
   const [selectedFormat, setSelectedFormat] = useState('mp4');

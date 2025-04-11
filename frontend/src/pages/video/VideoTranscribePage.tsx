@@ -1,4 +1,3 @@
-import React from 'react';
 import VideoTranscribeTool from "../../components/video/VideoTranscribeTool";
 import { Helmet } from "react-helmet";
 
