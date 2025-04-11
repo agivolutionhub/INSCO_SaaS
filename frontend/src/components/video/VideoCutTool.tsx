@@ -306,12 +306,6 @@ const VideoCutTool = () => {
       </div>
       
       <div className="p-6 bg-primary-50">
-        {!videoUrl && (
-          <p className="text-center text-gray-700 mb-4">
-            Esta herramienta permite cortar segmentos específicos de archivos de vídeo.
-          </p>
-        )}
-        
         {!videoUrl ? (
           <div className="mb-6">
             <div className="flex items-center justify-center w-full">

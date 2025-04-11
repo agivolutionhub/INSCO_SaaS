@@ -1109,11 +1109,6 @@ const VideoTranscribeTool = () => {
       </div>
       
       <div className="p-6 bg-primary-50">
-        {!videoUrl && (
-          <p className="text-center text-gray-700 mb-4">
-            Esta herramienta convierte el audio de videos y archivos de audio en texto escrito.
-          </p>
-        )}
         {!videoUrl ? (
           <div className="mb-6">
             <div className="flex items-center justify-center w-full">

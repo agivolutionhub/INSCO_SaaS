@@ -1,257 +1,389 @@
-import React, { useState } from 'react';
-import { FaUpload, FaCog, FaDownload, FaCheckCircle, FaExclamationTriangle, FaLanguage } from 'react-icons/fa';
-import { MdGTranslate } from 'react-icons/md';
-
-// URL base para las solicitudes API
-const API_BASE_URL = 'http://localhost:8088';
+import React, { useState, useRef, useEffect } from 'react';
+import axios from 'axios';
+import { FaUpload, FaSpinner, FaLanguage, FaDownload } from 'react-icons/fa';
 
 const VideoTranslateTool = () => {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [targetLanguage, setTargetLanguage] = useState<string>('es');
-  const [processedFiles, setProcessedFiles] = useState<Array<{url: string, name: string}>>([]);
+  // Estados para controlar el flujo de la aplicación
+  const [file, setFile] = useState<File | null>(null);
+  const [fileId, setFileId] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string>('');
+  const [textPreview, setTextPreview] = useState<string>('');
+  const [translatedText, setTranslatedText] = useState<string>('');
+  const [translationId, setTranslationId] = useState<string | null>(null);
+  const [sourceLanguage, setSourceLanguage] = useState<string>('Spanish');
+  const [targetLanguage, setTargetLanguage] = useState<string>('English');
+  const [languages, setLanguages] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<'idle' | 'processing' | 'processed' | 'error'>('idle');
-  const [progress, setProgress] = useState<number>(0);
+  const [isTranslating, setIsTranslating] = useState<boolean>(false);
+  const [success, setSuccess] = useState<boolean>(false);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setSelectedFile(e.target.files[0]);
-      setError(null);
-      setStatus('idle');
-      setProcessedFiles([]);
-      setProgress(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropZoneRef = useRef<HTMLDivElement>(null);
+
+  // Cargar idiomas disponibles
+  useEffect(() => {
+    const fetchLanguages = async () => {
+      try {
+        const response = await axios.get('/api/video-translate/languages');
+        if (response.data && response.data.languages) {
+          setLanguages(response.data.languages);
+        }
+      } catch (err) {
+        console.error('Error al cargar idiomas:', err);
+        setLanguages([
+          'English', 'Spanish', 'French', 'German', 'Italian', 
+          'Portuguese', 'Chinese', 'Japanese', 'Russian'
+        ]);
+      }
+    };
+
+    fetchLanguages();
+  }, []);
+
+  // Manejar el click en la zona de carga
+  const handleClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
-  // Función para simular la barra de progreso mientras se procesa el archivo
-  const startFakeProgressBar = () => {
-    setProgress(0);
-    const maxProgress = 90; // Solo llega al 90% máximo, el 100% se alcanza cuando termina realmente
-    const intervalStep = 300; // Intervalo entre incrementos
-    const smallStep = 1; // Incremento pequeño regular
-    const initialBoost = 10; // Impulso inicial para que se vea movimiento inmediato
-    const largeStepChance = 0.15; // Probabilidad de incrementos grandes
-    const largeStepSize = 5; // Tamaño del incremento grande
-    
-    // Dar un impulso inicial para que el usuario vea movimiento inmediato
-    setProgress(initialBoost);
-    
-    const interval = setInterval(() => {
-      setProgress(current => {
-        // Si estamos procesando y no hemos llegado al máximo
-        if (current < maxProgress) {
-          // Decidir si aplicar un incremento pequeño o grande
-          const increment = Math.random() < largeStepChance ? largeStepSize : smallStep;
-          const newProgress = Math.min(current + increment, maxProgress);
-          return newProgress;
-        }
-        // Mantener el progreso actual si ya alcanzó el máximo
-        return current;
-      });
-    }, intervalStep);
-    
-    // Devolver el ID del intervalo para limpiarlo después
-    return interval;
+  // Manejar drag enter
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dropZoneRef.current) {
+      dropZoneRef.current.classList.add('bg-[#fcfaf7]');
+    }
   };
 
-  const handleProcess = async () => {
-    if (!selectedFile) {
-      setError('Por favor seleccione un archivo de vídeo para traducir');
+  // Manejar drag leave
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dropZoneRef.current) {
+      dropZoneRef.current.classList.remove('bg-[#fcfaf7]');
+    }
+  };
+
+  // Manejar drag over
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  // Manejar drop
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (dropZoneRef.current) {
+      dropZoneRef.current.classList.remove('bg-[#fcfaf7]');
+    }
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileChange(e.dataTransfer.files[0]);
+    }
+  };
+
+  // Manejar cambio de archivo
+  const handleFileChange = (selectedFile: File) => {
+    const fileExtension = selectedFile.name.split('.').pop()?.toLowerCase();
+    
+    if (fileExtension !== 'txt' && fileExtension !== 'json') {
+      setError('Solo se permiten archivos de texto (.txt) o JSON (.json)');
       return;
     }
-
-    setIsLoading(true);
-    setStatus('processing');
-    setError(null);
-    setProgress(0);
     
-    // Iniciar la simulación de progreso inmediatamente
-    const progressInterval = startFakeProgressBar();
+    setFile(selectedFile);
+    setFileName(selectedFile.name);
+    setError(null);
+    setSuccess(false);
+    setTranslatedText('');
+    setTranslationId(null);
+    
+    // Subir el archivo automáticamente
+    uploadFile(selectedFile);
+  };
 
+  // Subir archivo
+  const uploadFile = async (selectedFile: File) => {
+    setIsLoading(true);
+    setError(null);
+    
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    
     try {
-      console.log(`Iniciando traducción al idioma: ${targetLanguage}...`);
+      const response = await axios.post('/api/upload-text-for-translation', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
       
-      // TODO: Implementar la conexión con el backend aquí
-      // Por ahora solo simulamos un proceso exitoso
-      
-      setTimeout(() => {
-        // Simulación de proceso exitoso
-        setProcessedFiles([{
-          url: "/api/download/video_traducido.mp4",
-          name: "video_traducido.mp4"
-        }, {
-          url: "/api/download/subtitulos_traducidos.srt",
-          name: "subtitulos_traducidos.srt"
-        }]);
-        setStatus('processed');
-        
-        // Completar la barra de progreso
-        setProgress(100);
-        
-        // Esperar un momento antes de ocultar la barra de progreso
-        setTimeout(() => {
-          setIsLoading(false);
-        }, 500);
-      }, 3000); // Simular 3 segundos de procesamiento
-      
-    } catch (err) {
-      console.error('Error en handleProcess:', err);
-      
-      // Limpiar el intervalo de progreso en caso de error
-      clearInterval(progressInterval);
-      
-      setError('Error al traducir el vídeo');
-      setStatus('error');
+      if (response.data) {
+        setFileId(response.data.file_id);
+        setTextPreview(response.data.text_preview || '');
+        setIsLoading(false);
+      }
+    } catch (err: any) {
+      console.error('Error al subir archivo:', err);
+      setError(err.response?.data?.detail || 'Error al subir el archivo');
       setIsLoading(false);
     }
   };
 
-  const handleDownload = (url: string) => {
-    if (url) {
-      const fullUrl = `${API_BASE_URL}${url}`;
-      console.log(`Descargando archivo desde: ${fullUrl}`);
-      window.open(fullUrl, '_blank');
+  // Traducir texto
+  const translateText = async () => {
+    if (!fileId) {
+      setError('No hay archivo para traducir');
+      return;
+    }
+    
+    setIsTranslating(true);
+    setError(null);
+    
+    const formData = new FormData();
+    formData.append('file_id', fileId);
+    formData.append('target_language', targetLanguage);
+    formData.append('original_language', sourceLanguage);
+    
+    try {
+      const response = await axios.post('/api/translate-file', formData);
+      
+      if (response.data) {
+        setTranslatedText(response.data.translated_text || '');
+        setTranslationId(response.data.translation_id || null);
+        setSuccess(true);
+      }
+    } catch (err: any) {
+      console.error('Error al traducir:', err);
+      setError(err.response?.data?.detail || 'Error al traducir el texto');
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  // Guardar cambios en la traducción
+  const saveTranslation = async () => {
+    if (!translatedText) {
+      setError('No hay texto para guardar');
+      return;
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    
+    const formData = new FormData();
+    formData.append('translated_text', translatedText);
+    formData.append('target_language', targetLanguage);
+    if (translationId) {
+      formData.append('translation_id', translationId);
+    }
+    if (fileName) {
+      formData.append('original_name', fileName.split('.')[0]);
+    }
+    
+    try {
+      const response = await axios.post('/api/save-edited-translation', formData);
+      
+      if (response.data) {
+        setTranslationId(response.data.translation_id || null);
+        setSuccess(true);
+      }
+    } catch (err: any) {
+      console.error('Error al guardar traducción:', err);
+      setError(err.response?.data?.detail || 'Error al guardar la traducción');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Descargar traducción
+  const downloadTranslation = () => {
+    if (translationId) {
+      window.open(`/api/download-translation/${translationId}`, '_blank');
+    } else if (translatedText) {
+      // Si no hay ID pero hay texto, crear un archivo para descargar
+      const blob = new Blob([translatedText], { type: 'text/plain' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `traduccion_${targetLanguage.toLowerCase()}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } else {
+      setError('No hay traducción para descargar');
     }
   };
 
   return (
     <div className="bg-white rounded-xl shadow-md overflow-hidden">
+      {/* Barra de título superior con color marrón */}
       <div className="bg-gradient-to-b from-[#c29e74] to-[#a78559] text-white shadow-md p-4">
-        <h2 className="text-white font-medium text-center">Seleccionar archivo de vídeo</h2>
+        <h2 className="font-medium text-white text-center">Seleccionar archivo de transcripción</h2>
       </div>
       
       <div className="p-6 bg-primary-50">
+        {/* Primera sección: Selección de archivo */}
         <div className="mb-6">
-          <div className="flex items-center justify-center w-full">
-            <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-primary-200 border-dashed rounded-xl cursor-pointer bg-white hover:bg-gray-50">
-              <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                <FaUpload className="w-8 h-8 mb-3 text-primary-500" />
-                <p className="mb-2 text-sm text-gray-700 text-center">
-                  <span className="font-semibold">Haga clic para cargar</span> o arrastre y suelte
-                </p>
-                <p className="text-xs text-gray-500 text-center">Archivos de vídeo (MP4, AVI, MOV)</p>
-              </div>
-              <input
-                type="file"
-                className="hidden"
-                accept="video/*"
-                onChange={handleFileChange}
-                disabled={isLoading}
-              />
-            </label>
+          <div
+            ref={dropZoneRef}
+            onClick={handleClick}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            className="border-2 border-dashed border-primary-200 rounded-lg p-12 text-center hover:border-primary-400 transition-colors cursor-pointer bg-white"
+          >
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              className="hidden" 
+              accept=".txt,.json" 
+              onChange={(e) => e.target.files && handleFileChange(e.target.files[0])} 
+            />
+            
+            <div className="flex flex-col items-center justify-center">
+              <FaUpload className="text-3xl text-primary-500 mb-3" />
+              <p className="mb-2 text-sm text-gray-700 text-center">
+                <span className="font-semibold">Haga clic para cargar</span> o arrastre y suelte
+              </p>
+              <p className="text-xs text-gray-500 text-center">Archivos de texto (.txt) o JSON (.json)</p>
+            </div>
           </div>
-          {selectedFile && (
-            <div className="mt-3 text-sm text-gray-600 text-center">
-              Archivo seleccionado: {selectedFile.name}
+          
+          {error && (
+            <div className="mt-3 p-2 bg-red-50 text-red-700 rounded-md text-sm">
+              {error}
+            </div>
+          )}
+          
+          {isLoading && (
+            <div className="mt-3 flex items-center justify-center">
+              <FaSpinner className="animate-spin text-primary-500 mr-2" />
+              <span className="text-gray-700 text-sm">Procesando archivo...</span>
+            </div>
+          )}
+          
+          {file && fileId && !isLoading && (
+            <div className="mt-3 p-3 bg-green-50 text-green-700 rounded-md text-sm">
+              <p className="font-semibold">Archivo cargado: {fileName}</p>
+              {textPreview && (
+                <div className="mt-2">
+                  <p className="font-semibold mb-1">Vista previa:</p>
+                  <p className="text-sm italic bg-white p-2 rounded border border-green-200 max-h-24 overflow-y-auto">
+                    {textPreview}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
         
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Idioma de destino:</label>
-          <select
-            value={targetLanguage}
-            onChange={(e) => setTargetLanguage(e.target.value)}
-            className="block w-full rounded-lg border border-gray-300 px-3 py-2 bg-white shadow-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            disabled={isLoading}
-          >
-            <option value="es">Español</option>
-            <option value="en">Inglés</option>
-            <option value="fr">Francés</option>
-            <option value="de">Alemán</option>
-            <option value="it">Italiano</option>
-            <option value="pt">Portugués</option>
-          </select>
-        </div>
-        
-        {/* Barra de progreso mejorada */}
-        {isLoading && (
-          <div className="mb-6 mt-2">
-            <div className="flex justify-between text-sm text-primary-700 mb-2">
-              <span className="font-medium flex items-center">
-                <FaCog className="animate-spin mr-2" />
-                Procesando traducción...
-              </span>
-              <span className="font-medium">{progress}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-4 shadow-inner overflow-hidden">
-              <div 
-                className={`h-4 rounded-full transition-all duration-300 relative ${
-                  error ? 'bg-red-500' : 'bg-gradient-to-r from-[#c79b6d] to-[#daaa7c]'
-                }`}
-                style={{ width: error ? '100%' : `${progress}%` }}
-              >
-                {!error && progress < 100 && (
-                  <div className="absolute inset-0 bg-white bg-opacity-20 overflow-hidden flex">
-                    <div className="h-full w-8 bg-white bg-opacity-30 transform -skew-x-30 animate-shimmer"></div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <p className="text-xs text-gray-500 mt-2 text-center">
-              {progress < 30 && "Analizando audio..."}
-              {progress >= 30 && progress < 60 && "Traduciendo contenido..."}
-              {progress >= 60 && progress < 90 && "Generando nuevo audio..."}
-              {progress >= 90 && "Finalizando proceso..."}
-            </p>
-          </div>
-        )}
-        
-        <div className="space-y-4">
-          <button
-            onClick={handleProcess}
-            disabled={!selectedFile || isLoading}
-            className={`w-full flex items-center justify-center py-3 px-4 rounded-lg text-white font-medium shadow-md ${
-              !selectedFile || isLoading 
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-gradient-to-b from-[#daaa7c] to-[#c79b6d] hover:from-[#c79b6d] hover:to-[#b78c5e]'
-            }`}
-          >
-            {isLoading ? (
-              <>
-                <FaCog className="animate-spin mr-2" />
-                Procesando...
-              </>
-            ) : (
-              <>
-                <MdGTranslate className="mr-2" /> Traducir vídeo
-              </>
-            )}
-          </button>
-          
-          {processedFiles.length > 0 && (
-            <div className="mt-4 bg-primary-100 p-5 rounded-xl border border-primary-200">
-              <div className="mb-4 border-b border-primary-200 pb-3">
-                <h3 className="text-lg font-medium text-primary-800 text-center">Archivos generados:</h3>
+        {/* Segunda sección: Opciones de traducción */}
+        {fileId && (
+          <div className="mb-5">
+            <h2 className="text-base font-semibold text-primary-800 mb-3">
+              Opciones de traducción
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-gray-700 mb-1 text-sm" htmlFor="sourceLanguage">
+                  Idioma de origen:
+                </label>
+                <select
+                  id="sourceLanguage"
+                  value={sourceLanguage}
+                  onChange={(e) => setSourceLanguage(e.target.value)}
+                  className="w-full p-2 border border-primary-200 rounded text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary-500 text-sm"
+                >
+                  {languages.map((lang) => (
+                    <option key={`source-${lang}`} value={lang}>
+                      {lang}
+                    </option>
+                  ))}
+                </select>
               </div>
               
-              <div className="space-y-2">
-                {processedFiles.map((file, index) => (
-                  <div key={index} className="flex items-center justify-between bg-white p-3 rounded-lg border border-primary-200">
-                    <span className="text-primary-700 font-medium truncate pr-4" style={{ flex: '1 1 auto', minWidth: 0 }}>{file.name}</span>
-                    <button
-                      onClick={() => handleDownload(file.url)}
-                      className={`bg-gradient-to-b from-[#daaa7c] to-[#c79b6d] hover:from-[#c79b6d] hover:to-[#b78c5e] text-white px-3 py-2 rounded-lg text-sm flex items-center flex-shrink-0 shadow-md`}
-                    >
-                      <FaDownload className="mr-2" /> Descargar
-                    </button>
-                  </div>
-                ))}
+              <div>
+                <label className="block text-gray-700 mb-1 text-sm" htmlFor="targetLanguage">
+                  Idioma de destino:
+                </label>
+                <select
+                  id="targetLanguage"
+                  value={targetLanguage}
+                  onChange={(e) => setTargetLanguage(e.target.value)}
+                  className="w-full p-2 border border-primary-200 rounded text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary-500 text-sm"
+                >
+                  {languages.map((lang) => (
+                    <option key={`target-${lang}`} value={lang}>
+                      {lang}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-          )}
-        </div>
-        
-        {error && (
-          <div className="mt-4 p-3 bg-red-50 text-red-600 rounded-lg flex items-center justify-center border border-red-200">
-            <FaExclamationTriangle className="mr-2" /> {error}
+            
+            <button
+              onClick={translateText}
+              disabled={isTranslating}
+              className="mt-4 w-full bg-gradient-to-b from-[#daaa7c] to-[#c79b6d] hover:from-[#c79b6d] hover:to-[#b78c5e] text-white py-2 px-4 rounded-md text-sm flex items-center justify-center transition-colors disabled:bg-gray-400"
+            >
+              {isTranslating ? (
+                <>
+                  <FaSpinner className="animate-spin mr-2" />
+                  Traduciendo...
+                </>
+              ) : (
+                <>
+                  <FaLanguage className="mr-2" />
+                  Traducir texto
+                </>
+              )}
+            </button>
           </div>
         )}
         
-        {status === 'processed' && processedFiles.length === 0 && (
-          <div className="mt-4 p-3 bg-green-50 text-green-600 rounded-lg flex items-center justify-center border border-green-200">
-            <FaCheckCircle className="mr-2" /> Vídeo traducido correctamente. Listo para descargar.
+        {/* Tercera sección: Resultado de la traducción */}
+        {translatedText && (
+          <div>
+            <h2 className="text-base font-semibold text-primary-800 mb-3">
+              Resultado de la traducción
+            </h2>
+            
+            <textarea
+              value={translatedText}
+              onChange={(e) => setTranslatedText(e.target.value)}
+              className="w-full h-48 p-2 border border-primary-200 rounded-md text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary-500 text-sm bg-white"
+            />
+            
+            <div className="mt-3 flex flex-wrap gap-2 justify-center">
+              <button
+                onClick={saveTranslation}
+                className="bg-gradient-to-b from-[#daaa7c] to-[#c79b6d] hover:from-[#c79b6d] hover:to-[#b78c5e] text-white py-2 px-3 rounded-md flex items-center transition-colors text-sm"
+              >
+                <FaUpload className="mr-2" />
+                Guardar cambios
+              </button>
+              
+              <button
+                onClick={downloadTranslation}
+                className="bg-gradient-to-b from-[#daaa7c] to-[#c79b6d] hover:from-[#c79b6d] hover:to-[#b78c5e] text-white py-2 px-3 rounded-md flex items-center transition-colors text-sm"
+              >
+                <FaDownload className="mr-2" />
+                Descargar traducción
+              </button>
+            </div>
+            
+            {success && !error && (
+              <div className="mt-3 p-2 bg-green-50 text-green-700 rounded-md text-sm">
+                Traducción completada y guardada correctamente
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -579,10 +579,6 @@ const VideoMontageTool = () => {
       </div>
       
       <div className="p-6 bg-primary-50">
-        <div className="text-center text-gray-700 mb-4">
-          Esta herramienta permite crear un vídeo combinando audio con una secuencia de imágenes.
-        </div>
-        
         {/* 1. Previsualización (ahora en la parte superior) */}
         {images.length > 0 && (
           <div className="mb-6">
@@ -608,10 +604,6 @@ const VideoMontageTool = () => {
         
         {/* 2. Reproductor de audio con forma de onda */}
         <div className="mb-6">
-          <h4 className="text-[#8d6e4c] font-medium mb-2 flex items-center">
-            <FaMusic className="mr-2" /> Audio para el montaje
-          </h4>
-          
           {!audioUrl ? (
             <div className="flex items-center justify-center w-full">
               <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-[#e2d5c3] rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
@@ -710,10 +702,6 @@ const VideoMontageTool = () => {
         
         {/* 3. Sección de sliders y posicionamiento de imágenes */}
         <div className="mb-6">
-          <h4 className="text-[#8d6e4c] font-medium mb-2 flex items-center">
-            <FaImage className="mr-2" /> Imágenes para el montaje
-          </h4>
-          
           {images.length === 0 ? (
             <div className="flex items-center justify-center w-full">
               <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-[#e2d5c3] rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
