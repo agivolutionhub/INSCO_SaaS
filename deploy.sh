@@ -38,6 +38,18 @@ fi
 echo -e "${GREEN}Construyendo y desplegando contenedores...${NC}"
 docker-compose up --build -d
 
+# Esperar a que los contenedores estén funcionando
+echo -e "${GREEN}Esperando a que los contenedores estén listos...${NC}"
+sleep 10
+
+# Copiar archivos del frontend a la carpeta de nginx
+echo -e "${GREEN}Copiando archivos del frontend a nginx...${NC}"
+docker cp insco-app:/app/static/. nginx/www/
+
+# Reiniciar nginx para aplicar cambios
+echo -e "${GREEN}Reiniciando nginx...${NC}"
+docker-compose restart nginx
+
 # Verificar que los contenedores estén funcionando
 if [ "$(docker ps -q -f name=insco-app)" ] && [ "$(docker ps -q -f name=insco-nginx)" ]; then
     echo -e "${GREEN}¡Despliegue completado con éxito!${NC}"

@@ -43,19 +43,4 @@ services:
       - insco-app
 
 volumes:
-  mongodb_data:
-
-# Nginx para servir el frontend y hacer de proxy para el backend
-nginx:
-  image: nginx:alpine
-  container_name: insco-nginx
-  restart: always
-  ports:
-    - "80:80"
-    - "443:443"
-  volumes:
-    - ./nginx/conf.d:/etc/nginx/conf.d
-    - ./nginx/ssl:/etc/nginx/ssl
-    - ./nginx/www:/var/www/html
-  depends_on:
-    - insco-app 
+  mongodb_data: 
