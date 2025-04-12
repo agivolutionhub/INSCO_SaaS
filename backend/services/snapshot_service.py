@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 import logging
 from pathlib import Path
-import subprocess, tempfile, platform, os, shutil
-from pdf2image import convert_from_path
-from typing import Dict, List, Optional, Union
+import os, shutil
+from typing import Dict, Optional, Union
 import requests
 import json
 
 DEFAULT_DPI, DEFAULT_FORMAT = 300, "png"
 DEFAULT_OUTPUT_DIR = Path("output")
-LIBREOFFICE_TIMEOUT = 60
 MICROREST_URL = "http://147.93.85.32:8090/convert_pptx_to_png"
 
 # Configuración de logger
@@ -66,12 +64,9 @@ def extract_pptx_slides(
         # Llamar al microservicio REST
         logger.info(f"Llamando al microservicio para convertir {shared_pptx_path}")
         
+        # Enviar parámetros como query parameters en la URL
         response = requests.post(
-            MICROREST_URL,
-            json={
-                "input_path": str(shared_pptx_path),
-                "output_dir": str(shared_output_dir)
-            }
+            f"{MICROREST_URL}?input_path={str(shared_pptx_path)}&output_dir={str(shared_output_dir)}"
         )
         
         response.raise_for_status()
