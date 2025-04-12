@@ -62,6 +62,7 @@ services:
       - ./storage:/app/storage
       - ./data:/app/data
       - ./config:/app/config
+      - ./backend:/app/backend
       - ./backend/config/auth_credentials.json:/app/config/auth_credentials.json
       - ./backend/config/openapi.json:/app/config/openapi.json
       - ./backend/config/sttapi.json:/app/config/sttapi.json
