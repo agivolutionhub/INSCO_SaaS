@@ -4,10 +4,13 @@ from pathlib import Path
 import subprocess, tempfile, platform, os, shutil
 from pdf2image import convert_from_path
 from typing import Dict, List, Optional, Union
+import requests
+import json
 
 DEFAULT_DPI, DEFAULT_FORMAT = 300, "png"
 DEFAULT_OUTPUT_DIR = Path("output")
 LIBREOFFICE_TIMEOUT = 60
+MICROREST_URL = "http://147.93.85.32:8090/convert_pptx_to_png"
 
 # Configuración de logger
 logger = logging.getLogger("snapshot-service")
@@ -18,78 +21,6 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
-def get_libreoffice_python() -> str:
-    """Obtiene la ruta al binario de Python usado por LibreOffice."""
-    system = platform.system().lower()
-    
-    if "UNO_PATH" in os.environ and os.path.exists(os.environ["UNO_PATH"]):
-        return os.environ.get("LIBREOFFICE_PYTHON", "python3")
-    
-    if system == "darwin":
-        return "/Applications/LibreOffice.app/Contents/MacOS/python"
-    elif system == "linux":
-        linux_paths = ["/usr/bin/python3", "/usr/lib/libreoffice/program/python", 
-                      "/usr/lib/libreoffice/program/python3", "/opt/libreoffice/program/python"]
-        for path in linux_paths:
-            if Path(path).exists(): return path
-    elif system == "windows":
-        for prog_dir in ["C:\\Program Files", "C:\\Program Files (x86)"]:
-            for ver in ["", " 5", " 6", " 7", " 8"]:
-                path = f"{prog_dir}\\LibreOffice{ver}\\program\\python.exe"
-                if Path(path).exists(): return path
-    
-    return "python3"
-
-def pptx_to_pdf(input_file: Union[str, Path], output_file: Union[str, Path]) -> str:
-    """Convierte un archivo PPTX a PDF usando LibreOffice."""
-    input_file, output_file = str(input_file), str(output_file)
-    env = os.environ.copy()
-    
-    logger.info(f"Convirtiendo PPTX a PDF: {input_file} -> {output_file}")
-    
-    if platform.system().lower() == "linux":
-        env["LC_ALL"], env["SAL_USE_VCLPLUGIN"] = "C.UTF-8", "gen"
-    
-    try:
-        try:
-            logger.debug("Intentando conversión con unoconv...")
-            subprocess.run(["unoconv", "-f", "pdf", "-o", output_file, input_file], 
-                          check=True, capture_output=True, text=True,
-                          env=env, timeout=LIBREOFFICE_TIMEOUT)
-        except (subprocess.SubprocessError, FileNotFoundError):
-            logger.debug("Fallback a Python de LibreOffice con unoconv...")
-            subprocess.run([get_libreoffice_python(), "-m", "unoconv", "-f", "pdf", "-o", 
-                           output_file, input_file], check=True, capture_output=True, 
-                           text=True, env=env, timeout=LIBREOFFICE_TIMEOUT)
-        
-        if not Path(output_file).exists():
-            raise RuntimeError(f"La conversión a PDF falló: {output_file} no fue creado")
-        
-        logger.info(f"Conversión PPTX a PDF completada: {output_file}")
-        return output_file
-    except subprocess.TimeoutExpired:
-        logger.error(f"Tiempo agotado al convertir PPTX a PDF (límite: {LIBREOFFICE_TIMEOUT}s)")
-        raise RuntimeError(f"Tiempo agotado al convertir PPTX a PDF (límite: {LIBREOFFICE_TIMEOUT}s)")
-    except subprocess.CalledProcessError as e:
-        logger.warning(f"Error en unoconv, intentando con LibreOffice directo: {str(e)}")
-        try:
-            out_dir = os.path.dirname(output_file)
-            subprocess.run(["libreoffice", "--headless", "--convert-to", "pdf", 
-                           "--outdir", out_dir, input_file], check=True, 
-                           capture_output=True, text=True, env=env, timeout=LIBREOFFICE_TIMEOUT)
-            
-            gen_pdf = os.path.join(out_dir, os.path.basename(input_file).replace(".pptx", ".pdf"))
-            if os.path.exists(gen_pdf) and gen_pdf != output_file:
-                shutil.move(gen_pdf, output_file)
-            
-            if Path(output_file).exists(): 
-                logger.info(f"Conversión con LibreOffice exitosa: {output_file}")
-                return output_file
-        except Exception as e:
-            logger.error(f"Error en fallback a LibreOffice: {str(e)}")
-        
-        raise RuntimeError("Error al convertir PPTX a PDF")
-
 def extract_pptx_slides(
     pptx_path: Union[str, Path], 
     output_dir: Optional[Union[str, Path]] = None, 
@@ -97,7 +28,7 @@ def extract_pptx_slides(
     dpi: int = DEFAULT_DPI
 ) -> Dict:
     """
-    Extrae diapositivas de un archivo PPTX como imágenes.
+    Extrae diapositivas de un archivo PPTX como imágenes usando el servicio MicroREST.
     
     Args:
         pptx_path: Ruta al archivo PPTX
@@ -119,36 +50,64 @@ def extract_pptx_slides(
     logger.info(f"Extrayendo diapositivas de {pptx_path} a {output_dir} ({format.upper()}, {dpi}dpi)")
     
     stats = {"slides": 0, "generated_files": []}
-    temp_dir = tempfile.mkdtemp(prefix="insco_snapshot_")
-    pdf_file = os.path.join(temp_dir, f"{pptx_path.stem}.pdf")
+    
+    # Preparar rutas para el microservicio
+    shared_temp_dir = Path("/tmp/conversions")
+    shared_temp_dir.mkdir(parents=True, exist_ok=True)
+    
+    shared_output_dir = shared_temp_dir / "output"
+    shared_output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Copiar archivo PPTX al directorio compartido
+    shared_pptx_path = shared_temp_dir / pptx_path.name
+    shutil.copy2(pptx_path, shared_pptx_path)
     
     try:
-        pdf_file = pptx_to_pdf(pptx_path, pdf_file)
+        # Llamar al microservicio REST
+        logger.info(f"Llamando al microservicio para convertir {shared_pptx_path}")
         
-        conversion_args = {}
-        if os.environ.get("INSCO_MEMORY_LIMIT") and platform.system().lower() == "linux":
-            conversion_args["thread_count"] = 1
-            logger.debug("Limitando threads para conversión de PDF a imágenes")
+        response = requests.post(
+            MICROREST_URL,
+            json={
+                "input_path": str(shared_pptx_path),
+                "output_dir": str(shared_output_dir)
+            }
+        )
         
-        logger.info(f"Convirtiendo PDF a imágenes {format.upper()} ({dpi}dpi)")
-        images = convert_from_path(pdf_file, dpi=dpi, **conversion_args)
+        response.raise_for_status()
+        result = response.json()
         
-        for i, image in enumerate(images, 1):
+        if result["status"] != "success":
+            raise RuntimeError(f"Error en el microservicio: {result.get('error', 'Unknown error')}")
+            
+        # Copiar imágenes generadas al directorio final
+        for i, file_name in enumerate(result["output_files"], 1):
+            source_file = shared_output_dir / file_name
+            if not source_file.exists():
+                logger.warning(f"Archivo de origen no encontrado: {source_file}")
+                continue
+                
             output_file = output_dir / f"slide_{i:03d}.{format}"
-            image.save(output_file, format.upper())
+            shutil.copy2(source_file, output_file)
             stats["generated_files"].append(str(output_file))
             stats["slides"] += 1
             
         logger.info(f"Generadas {stats['slides']} imágenes en {output_dir}")
+    except requests.RequestException as e:
+        logger.error(f"Error al comunicarse con el microservicio: {str(e)}")
+        raise RuntimeError(f"Error al comunicarse con el microservicio: {str(e)}")
     except Exception as e:
         logger.error(f"Error al extraer diapositivas: {str(e)}")
         raise
     finally:
         try: 
-            shutil.rmtree(temp_dir, ignore_errors=True)
-            logger.debug(f"Directorio temporal eliminado: {temp_dir}")
+            # Limpiar archivos temporales
+            for file in shared_output_dir.glob("*"):
+                file.unlink()
+            if shared_pptx_path.exists():
+                shared_pptx_path.unlink()
         except Exception as e: 
-            logger.warning(f"No se pudo eliminar directorio temporal: {str(e)}")
+            logger.warning(f"No se pudieron eliminar archivos temporales: {str(e)}")
     
     return {
         "slides": stats["slides"],
