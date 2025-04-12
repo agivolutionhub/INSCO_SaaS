@@ -68,8 +68,9 @@ logs/
 .env.development.local
 .env.test.local
 .env.production.local
-config/local/
-config/cache/
+# NO IGNORES la carpeta config/ para incluir credenciales en el despliegue
+# config/local/
+# config/cache/
 
 # Distribución
 /build/
