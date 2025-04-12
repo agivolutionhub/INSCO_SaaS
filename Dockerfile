@@ -17,7 +17,7 @@ ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build || (echo "Ignorando errores de TypeScript" && vite build)
 
 # Usar una imagen base de Python para el backend
-FROM python:3.12-slim
+FROM python:3.12-bookworm
 
 # Configuraciones iniciales para evitar interactividad durante la instalación
 ENV DEBIAN_FRONTEND=noninteractive \
