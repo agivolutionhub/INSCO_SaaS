@@ -17,3 +17,4 @@ fpdf2
 aiohttp
 numpy
 psutil>=7.0.0 
+rich>=13.7.0 
