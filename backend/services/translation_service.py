@@ -114,20 +114,14 @@ class TranslationCache:
 class Translator:
     def __init__(self, target_language="en", use_cache=True):
         self.target_language = target_language
-        self._configure_proxy()
         
+        # Inicializar cliente OpenAI sin configuración de proxies
         self.client = OpenAI(api_key=self._get_api_key())
         self.current_thread = None
         self.cache = TranslationCache() if use_cache else None
         self.stats = {"texts": 0, "calls": 0, "duplicate_texts": 0, "retries": 0, "retry_success": 0, "errors": 0}
         self.token_stats = {"input_tokens": 0, "output_tokens": 0, "cached_input_tokens": 0}
         self._test_connection()
-    
-    def _configure_proxy(self):
-        """Configurar proxy para la conexión API"""
-        os.environ["no_proxy"] = "*"
-        if "HTTP_PROXY" in os.environ: del os.environ["HTTP_PROXY"]
-        if "HTTPS_PROXY" in os.environ: del os.environ["HTTPS_PROXY"]
     
     def _get_api_key(self):
         if not (key := os.environ.get("OPENAI_API_KEY")):
