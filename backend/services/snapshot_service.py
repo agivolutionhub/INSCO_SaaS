@@ -9,6 +9,7 @@ import json
 DEFAULT_DPI, DEFAULT_FORMAT = 300, "png"
 DEFAULT_OUTPUT_DIR = Path("output")
 MICROREST_URL = "http://147.93.85.32:8090/convert_pptx_to_png"
+MICROREST_TIMEOUT = 30  # Timeout en segundos para las solicitudes al microservicio
 
 # Configuración de logger
 logger = logging.getLogger("snapshot-service")
@@ -56,9 +57,11 @@ def extract_pptx_slides(
         with open(pptx_path, "rb") as file:
             files = {"file": (pptx_path.name, file, 'application/vnd.openxmlformats-officedocument.presentationml.presentation')}
             
+            # Añadir timeout para evitar esperas infinitas
             response = requests.post(
                 MICROREST_URL,
-                files=files
+                files=files,
+                timeout=MICROREST_TIMEOUT
             )
         
         response.raise_for_status()
@@ -104,6 +107,9 @@ def extract_pptx_slides(
             raise ValueError(f"Tipo de contenido inesperado del microservicio: {content_type}")
             
         logger.info(f"Generadas {stats['slides']} imágenes en {output_dir}")
+    except requests.exceptions.Timeout as e:
+        logger.error(f"Timeout al comunicarse con el microservicio (tiempo límite: {MICROREST_TIMEOUT}s): {str(e)}")
+        raise RuntimeError(f"El microservicio no respondió dentro del tiempo límite ({MICROREST_TIMEOUT}s). Podría estar sobrecargado o no disponible.")
     except requests.RequestException as e:
         logger.error(f"Error al comunicarse con el microservicio: {str(e)}")
         raise RuntimeError(f"Error al comunicarse con el microservicio: {str(e)}")

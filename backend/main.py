@@ -14,6 +14,7 @@ import time
 from typing import List, Dict, Optional, Any
 from rich.console import Console
 from dotenv import load_dotenv
+import asyncio
 
 # Cargar variables de entorno desde .env
 env_path = Path(__file__).resolve().parent / "config" / ".env"
@@ -536,32 +537,80 @@ async def process_captures(file_id: str = Form(...), original_name: str = Form(N
         capture_dir = CAPTURES_DIR / file_id
         capture_dir.mkdir(parents=True, exist_ok=True)
         
-        try:
-            stats = extract_pptx_slides(
-                pptx_path=file_path,
-                output_dir=capture_dir,
-                format="png",
-                dpi=300
-            )
+        # Intentar con reintento
+        max_retries = 2
+        retry_count = 0
+        last_error = None
+        
+        while retry_count <= max_retries:
+            try:
+                console.print(f"[green]Procesando archivo PPTX {file_path}... (intento {retry_count+1})")
+                
+                stats = extract_pptx_slides(
+                    pptx_path=file_path,
+                    output_dir=capture_dir,
+                    format="png",
+                    dpi=300
+                )
+                
+                # Crear URLs correctas para acceder a las imágenes
+                image_urls = []
+                for img_path in sorted(capture_dir.glob("*.png")):
+                    slide_name = img_path.name
+                    image_urls.append(f"/api/snapshot/files/{file_id}/{slide_name}")
+                
+                if not image_urls:
+                    console.print("[yellow]Advertencia: No se generaron imágenes")
+                    raise ValueError("No se generaron imágenes durante la conversión")
+                
+                console.print(f"[green]✓ Generadas {len(image_urls)} imágenes exitosamente")
+                
+                return {
+                    "status": "success",
+                    "file_id": file_id,
+                    "original_name": original_name or Path(file_path).stem,
+                    "slides_count": stats["slides"],
+                    "image_urls": image_urls
+                }
+                
+            except RuntimeError as e:
+                if "timeout" in str(e).lower() or "connection" in str(e).lower():
+                    # Error de conexión o timeout, podemos reintentar
+                    retry_count += 1
+                    last_error = e
+                    console.print(f"[yellow]Error de conexión (intento {retry_count}/{max_retries+1}): {str(e)}")
+                    if retry_count <= max_retries:
+                        # Esperar antes de reintentar
+                        await asyncio.sleep(2)
+                        continue
+                    else:
+                        # Agotamos los reintentos
+                        console.print(f"[red]Error después de {max_retries+1} intentos: {str(e)}")
+                        break
+                else:
+                    # Otro tipo de error, no reintentamos
+                    last_error = e
+                    break
+            except Exception as e:
+                console.print(f"[red]Error al procesar PPTX: {str(e)}")
+                last_error = e
+                break
+        
+        # Si llegamos aquí, hubo un error tras todos los reintentos
+        if "timeout" in str(last_error).lower():
+            error_message = f"Error de timeout al conectar con el servicio de conversión. El servicio podría estar temporalmente no disponible."
+        elif "connection" in str(last_error).lower():
+            error_message = f"Error de conexión con el servicio de conversión. Por favor, verifique la conectividad de red."
+        else:
+            error_message = f"Error al generar capturas: {str(last_error)}"
+        
+        console.print(f"[red]ERROR FINAL: {error_message}")
+        raise HTTPException(status_code=500, detail=error_message)
             
-            # Crear URLs correctas para acceder a las imágenes
-            image_urls = []
-            for img_path in sorted(capture_dir.glob("*.png")):
-                slide_name = img_path.name
-                image_urls.append(f"/api/snapshot/files/{file_id}/{slide_name}")
-            
-            return {
-                "status": "success",
-                "file_id": file_id,
-                "original_name": original_name or Path(file_path).stem,
-                "slides_count": stats["slides"],
-                "image_urls": image_urls
-            }
-            
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error al generar capturas: {str(e)}")
-            
+    except HTTPException:
+        raise
     except Exception as e:
+        console.print(f"[red]Error no controlado: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error al procesar el archivo: {str(e)}")
 
 @app.get("/api/download/{filename}")
