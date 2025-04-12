@@ -45,7 +45,7 @@ fi
 
 # 4. Configurar CORS en backend para permitir solicitudes del frontend
 echo -e "\n${GREEN}4. Configurando CORS en el backend...${NC}"
-sed -i "s|allow_origins=\[\(.*\)\]|allow_origins=[\"http://localhost:5173\", \"http://localhost:5174\", \"http://localhost:3000\", \"http://$PUBLIC_IP:3000\"]|g" backend/main.py
+sed -i "s|allow_origins=\[\(.*\)\]|allow_origins=[\"http://localhost:5173\", \"http://localhost:5174\", \"http://localhost:3000\", \"http://localhost:3001\", \"http://$PUBLIC_IP:3001\"]|g" backend/main.py
 
 # 5. Crear docker-compose para backend solamente
 echo -e "\n${GREEN}5. Creando configuración para desplegar solo el backend...${NC}"
@@ -125,9 +125,9 @@ fi
 # 11. Detener cualquier instancia anterior del frontend
 pkill -f "serve -s dist" || true
 
-# 12. Servir frontend en segundo plano
-echo -e "\n${GREEN}10. Iniciando servidor frontend en puerto 3000...${NC}"
-nohup serve -s dist -l 3000 > ../frontend.log 2>&1 &
+# 12. Servir frontend en segundo plano (usando puerto 3001 en lugar de 3000)
+echo -e "\n${GREEN}10. Iniciando servidor frontend en puerto 3001...${NC}"
+nohup serve -s dist -l 3001 > ../frontend.log 2>&1 &
 FRONTEND_PID=$!
 echo $FRONTEND_PID > ../frontend.pid
 echo -e "${GREEN}✓ Frontend desplegado con PID: $FRONTEND_PID (guardado en frontend.pid)${NC}"
@@ -139,13 +139,13 @@ echo -e "\n${GREEN}11. Verificando puertos...${NC}"
 command -v ufw >/dev/null 2>&1 && {
     echo -e "${YELLOW}Verificando firewall (ufw)...${NC}"
     ufw status | grep "8088" || echo -e "${YELLOW}⚠️ Puede que necesites abrir el puerto 8088: sudo ufw allow 8088${NC}"
-    ufw status | grep "3000" || echo -e "${YELLOW}⚠️ Puede que necesites abrir el puerto 3000: sudo ufw allow 3000${NC}"
+    ufw status | grep "3001" || echo -e "${YELLOW}⚠️ Puede que necesites abrir el puerto 3001: sudo ufw allow 3001${NC}"
 }
 
 # 14. Instrucciones finales
 echo -e "\n${GREEN}=== DESPLIEGUE COMPLETADO ===${NC}"
 echo -e "${GREEN}✓ Backend: http://$PUBLIC_IP:8088/api/root${NC}"
-echo -e "${GREEN}✓ Frontend: http://$PUBLIC_IP:3000${NC}"
+echo -e "${GREEN}✓ Frontend: http://$PUBLIC_IP:3001${NC}"
 echo -e ""
 echo -e "${YELLOW}Para detener el frontend:${NC} kill \$(cat frontend.pid)"
 echo -e "${YELLOW}Para detener el backend:${NC} docker compose -f docker-compose.backend.yml down"
@@ -153,7 +153,7 @@ echo -e "${YELLOW}Para ver logs del frontend:${NC} tail -f frontend.log"
 echo -e "${YELLOW}Para ver logs del backend:${NC} docker logs -f insco-backend"
 echo -e ""
 echo -e "${GREEN}Si encuentras problemas:${NC}"
-echo -e "1. Verifica que los puertos 3000 y 8088 estén abiertos en el firewall"
+echo -e "1. Verifica que los puertos 3001 y 8088 estén abiertos en el firewall"
 echo -e "2. Comprueba que los archivos de configuración estén en backend/config/"
 echo -e "3. Revisa los logs de ambos servicios"
 
