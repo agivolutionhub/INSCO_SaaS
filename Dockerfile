@@ -19,6 +19,11 @@ RUN npm run build || (echo "Ignorando errores de TypeScript" && vite build)
 # Usar una imagen base de Python para el backend
 FROM python:3.12-slim
 
+# Configuraciones iniciales para evitar interactividad durante la instalación
+ENV DEBIAN_FRONTEND=noninteractive \
+    TERM=dumb \
+    PYTHONUNBUFFERED=1
+
 # Instalar dependencias del sistema necesarias
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice \
@@ -33,16 +38,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-transport-https \
     ca-certificates \
     gnupg \
+    dbus-x11 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Configurar entorno LibreOffice para modo headless
 ENV PYTHONPATH="/usr/lib/libreoffice/program" \
     UNO_PATH="/usr/lib/libreoffice/program" \
-    URE_BOOTSTRAP="file:///usr/lib/libreoffice/program/fundamental.ini"
+    URE_BOOTSTRAP="file:///usr/lib/libreoffice/program/fundamental.ini" \
+    HOME="/tmp"
 
-# Aplicar optimizaciones del sistema
-RUN echo 'vm.overcommit_memory=1' >> /etc/sysctl.d/99-insco.conf
+# Crear un directorio temporal para LibreOffice
+RUN mkdir -p /tmp/.config/libreoffice && chmod -R 777 /tmp/.config
 
 # Directorio de trabajo para el backend
 WORKDIR /app
@@ -60,7 +67,12 @@ COPY backend/ ./backend/
 COPY --from=frontend-builder /app/frontend/dist /app/static
 
 # Crear directorios necesarios
-RUN mkdir -p /app/storage /app/tmp
+RUN mkdir -p /app/storage /app/tmp && chmod -R 777 /app/storage /app/tmp
+
+# Verificar que LibreOffice funciona en modo headless
+RUN echo "Comprobando instalación de LibreOffice..." \
+    && libreoffice --version --headless \
+    && echo "LibreOffice instalado correctamente."
 
 # Exponer el puerto del backend
 EXPOSE 8088

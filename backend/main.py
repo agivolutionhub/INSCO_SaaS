@@ -103,6 +103,54 @@ app.include_router(video_translate_router)
 async def root():
     return {"message": "Bienvenido a la API de INSCO"}
 
+@app.get("/health")
+async def health_check():
+    """Endpoint para verificar la salud del servicio (usado por Docker healthcheck)"""
+    # Verificar los servicios críticos
+    health_status = {
+        "status": "healthy",
+        "time": time.time(),
+        "version": "1.0.0",
+        "services": {
+            "storage": True,
+            "tmp": True
+        }
+    }
+    
+    # Verificar que los directorios críticos sean accesibles
+    try:
+        # Comprobar directorio de almacenamiento
+        storage_test = BASE_DIR / "storage" / "test.txt"
+        with open(storage_test, "w") as f:
+            f.write("test")
+        os.unlink(storage_test)
+        
+        # Comprobar directorio temporal
+        tmp_test = BASE_DIR / "tmp" / "test.txt"
+        with open(tmp_test, "w") as f:
+            f.write("test")
+        os.unlink(tmp_test)
+    except Exception as e:
+        health_status["status"] = "unhealthy"
+        health_status["error"] = str(e)
+        return JSONResponse(status_code=500, content=health_status)
+    
+    # Intenta verificar LibreOffice si está siendo utilizado
+    try:
+        import subprocess
+        result = subprocess.run(["libreoffice", "--version", "--headless"], 
+                              capture_output=True, text=True, timeout=5)
+        health_status["services"]["libreoffice"] = result.returncode == 0
+        if result.returncode != 0:
+            health_status["status"] = "degraded"
+            health_status["libreoffice_error"] = result.stderr
+    except Exception as e:
+        health_status["services"]["libreoffice"] = False
+        health_status["status"] = "degraded"
+        health_status["libreoffice_error"] = str(e)
+    
+    return health_status
+
 # Endpoints específicos para transcripción de video
 @app.post("/api/upload-video-for-transcription")
 async def upload_video_for_transcription(file: UploadFile = File(...)):
