@@ -144,12 +144,8 @@ async def health_check():
         if response.status_code != 200:
             health_status["status"] = "degraded"
             health_status["microrest_error"] = f"Status code: {response.status_code}"
-        else:
-            # El servicio está activo, por lo que marcamos el servicio de conversión como activo
-            health_status["services"]["libreoffice"] = True
     except Exception as e:
         health_status["services"]["microrest_pptx"] = False
-        health_status["services"]["libreoffice"] = False
         health_status["status"] = "degraded"
         health_status["microrest_error"] = str(e)
     

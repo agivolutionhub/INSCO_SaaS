@@ -129,35 +129,32 @@ def extract_pptx_slides(
             logger.error(f"Datos de respuesta incompletos: {data}")
             raise RuntimeError("Respuesta incompleta del microservicio")
         
-        # Extraer el nombre del directorio de salida para construir la URL correcta
-        # El formato correcto podría variar dependiendo de cómo esté implementado el endpoint
-        # Probaremos varios enfoques
+        # Registrar la ruta original proporcionada por el microservicio
+        logger.info(f"Directorio remoto original: {remote_output_dir}")
         
-        # 1. Usar solo el nombre del directorio temporal (sin output)
-        temp_dir_name = os.path.basename(os.path.dirname(remote_output_dir))
-        
-        # 2. Usar la ruta relativa desde /tmp
+        # Preparar la ruta para las URLs
+        # Eliminar el prefijo '/tmp/' ya que los endpoints no lo incluyen
         if remote_output_dir.startswith('/tmp/'):
-            relative_path = remote_output_dir[5:]  # Quitar '/tmp/'
+            endpoint_path = remote_output_dir[5:]  # Quitar '/tmp/'
         else:
-            relative_path = remote_output_dir
+            endpoint_path = remote_output_dir
             
-        logger.info(f"Directorio remoto: {remote_output_dir}")
-        logger.info(f"Nombre dir temporal: {temp_dir_name}")
-        logger.info(f"Ruta relativa: {relative_path}")
+        logger.info(f"Ruta para endpoints: {endpoint_path}")
         
-        # Intentar varias formas de URL para mayor compatibilidad
+        # Intentar descargar los archivos
         successful_downloads = 0
         
         for i, remote_file in enumerate(sorted(remote_files), 1):
             local_file = output_dir / f"slide_{i:03d}.{format}"
             
-            # Intentar diferentes formatos de URL
+            # Construir URLs usando la ruta proporcionada por el microservicio
             url_formats = [
-                f"http://147.93.85.32:8090/get_png/{temp_dir_name}/output/{remote_file}",
-                f"http://147.93.85.32:8090/get_png/{relative_path}/{remote_file}",
-                f"http://147.93.85.32:8090/get_png/{remote_file}",
-                f"http://147.93.85.32:8090/files/{temp_dir_name}/output/{remote_file}"
+                # URL principal usando la ruta exacta proporcionada por el microservicio
+                f"http://147.93.85.32:8090/get_png/{endpoint_path}/{remote_file}",
+                # URL alternativa usando el endpoint files
+                f"http://147.93.85.32:8090/files/{endpoint_path}/{remote_file}",
+                # Fallbacks por si la estructura cambia
+                f"http://147.93.85.32:8090/get_png/{remote_file}"
             ]
             
             downloaded = False
@@ -183,14 +180,51 @@ def extract_pptx_slides(
             if not downloaded:
                 logger.error(f"No se pudo descargar {remote_file} con ningún formato de URL")
                 # Crear una imagen de marcador de posición si no pudimos descargar la real
-                image = Image.new('RGB', (800, 600), color=(255, 255, 255))
-                draw = ImageDraw.Draw(image)
-                draw.rectangle([(20, 20), (780, 580)], outline=(200, 200, 200), width=2)
-                draw.text((400, 300), f"Error: No se pudo descargar\nDiapositiva {i}", 
-                          fill=(0, 0, 0), anchor="mm")
-                image.save(local_file)
-                stats["generated_files"].append(str(local_file))
-                successful_downloads += 1
+                try:
+                    image = Image.new('RGB', (800, 600), color=(255, 255, 255))
+                    draw = ImageDraw.Draw(image)
+                    draw.rectangle([(20, 20), (780, 580)], outline=(200, 200, 200), width=2)
+                    
+                    # Intentar usar una fuente del sistema o la fuente por defecto
+                    try:
+                        # Intentar con diferentes fuentes del sistema según el SO
+                        font = ImageFont.truetype("Arial", 24)
+                    except IOError:
+                        try:
+                            font = ImageFont.truetype("DejaVuSans", 24)
+                        except IOError:
+                            font = ImageFont.load_default()
+                    
+                    # Dibujar texto centrado
+                    texto = f"Error: No se pudo descargar\nDiapositiva {i} de {len(remote_files)}"
+                    
+                    # Centrar el texto manualmente para PIL antiguo
+                    text_width, text_height = draw.textsize(texto, font=font) if hasattr(draw, 'textsize') else (400, 60)
+                    position = ((800 - text_width) // 2, (600 - text_height) // 2)
+                    
+                    # Dibujar el texto
+                    draw.text(position, texto, fill=(0, 0, 0), font=font)
+                    
+                    # Añadir un borde rojo para indicar que es un placeholder
+                    draw.rectangle([(10, 10), (790, 590)], outline=(255, 0, 0), width=5)
+                    
+                    # Asegurarse de que el directorio existe
+                    if not os.path.exists(os.path.dirname(local_file)):
+                        os.makedirs(os.path.dirname(local_file), exist_ok=True)
+                    
+                    # Guardar con calidad alta
+                    image.save(local_file, quality=95)
+                    
+                    # Verificar que la imagen se guardó correctamente
+                    if not os.path.exists(local_file):
+                        logger.error(f"Error: No se pudo guardar la imagen placeholder en {local_file}")
+                    else:
+                        logger.info(f"✅ Imagen placeholder creada correctamente en {local_file}")
+                        stats["generated_files"].append(str(local_file))
+                        successful_downloads += 1
+                except Exception as e:
+                    logger.error(f"Error al crear imagen placeholder: {str(e)}")
+                    continue
         
         # Actualizar el conteo de diapositivas
         stats["slides"] = successful_downloads
