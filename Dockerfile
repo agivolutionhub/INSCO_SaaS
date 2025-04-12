@@ -17,31 +17,36 @@ ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build || vite build
 
 FROM python:3.10-slim
+
+# Variables de entorno para la construcción
 ENV DEBIAN_FRONTEND=noninteractive \
     TERM=dumb \
     PYTHONUNBUFFERED=1
+
+# Instalar dependencias mínimas necesarias
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    poppler-utils \
     curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Directorio de trabajo
 WORKDIR /app
+
+# Copiar y instalar dependencias de Python
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY backend/ ./backend/
-COPY --from=frontend-builder /app/frontend/dist /app/static
-RUN mkdir -p /app/storage /app/tmp && chmod -R 777 /app/storage /app/tmp
 
-# Configurar variables de entorno predeterminadas vacías (serán sobrescritas por el volume mount o el script de configuración)
-ENV OPENAI_API_KEY=""
-ENV OPENAI_ASSISTANT_ID=""
+# Copiar código del backend
+COPY backend/ ./backend/
+
+# Copiar frontend construido
+COPY --from=frontend-builder /app/frontend/dist /app/static
+
+# Crear directorios necesarios
+RUN mkdir -p /app/storage /app/tmp /app/config && chmod -R 777 /app/storage /app/tmp /app/config
 
 EXPOSE 8088
 ENV ENVIRONMENT=production
 
-# Hacer ejecutable el script de configuración de entorno
-RUN chmod +x /app/backend/scripts/setup_env.py
-
-# Ejecutar el script de configuración de entorno antes de iniciar la aplicación
-CMD python3 /app/backend/scripts/setup_env.py && python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8088 --log-level debug 
+# Comando de inicio
+CMD python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8088 --log-level info 

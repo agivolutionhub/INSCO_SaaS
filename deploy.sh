@@ -8,7 +8,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}=== Iniciando despliegue del proyecto INSCO ===${NC}"
+echo -e "${GREEN}=== Iniciando despliegue del proyecto INSCO (Versión Mínima) ===${NC}"
 
 # Verificar si Docker y Docker Compose están instalados
 if ! command -v docker &> /dev/null || ! docker compose version &> /dev/null; then
@@ -20,17 +20,17 @@ if ! command -v docker &> /dev/null || ! docker compose version &> /dev/null; th
     exit 1
 fi
 
-# Verificar que exista el archivo de credenciales JSON
+# Verificar que exista el archivo de credenciales JSON o crearlo si no existe
 if [ ! -f "./backend/config/auth_credentials.json" ]; then
-    echo -e "${RED}Error: No se encuentra el archivo de configuración en backend/config/auth_credentials.json${NC}"
-    echo -e "Crea el archivo con la siguiente estructura:"
-    echo -e '{
+    echo -e "${YELLOW}No se encuentra el archivo de configuración. Creando uno vacío...${NC}"
+    mkdir -p ./backend/config
+    echo '{
   "openai": {
-    "api_key": "tu_api_key",
-    "assistant_id": "tu_assistant_id"
+    "api_key": "",
+    "assistant_id": ""
   }
-}'
-    exit 1
+}' > ./backend/config/auth_credentials.json
+    echo -e "${GREEN}Creado archivo de credenciales vacío. Recuerda actualizarlo más tarde.${NC}"
 fi
 
 # Crear directorios necesarios
@@ -53,23 +53,19 @@ sleep 10
 if [ "$(docker ps -q -f name=insco-app)" ]; then
     echo -e "${GREEN}¡Despliegue completado con éxito!${NC}"
     
-    # Verificar si OpenAI está configurado
-    OPENAI_CONFIGURED=$(docker exec insco-app grep "api_key" /app/config/auth_credentials.json > /dev/null 2>&1 && echo "true" || echo "false")
-    if [ "$OPENAI_CONFIGURED" = "true" ]; then
-        echo -e "${GREEN}✅ API de OpenAI configurada correctamente${NC}"
-    else
-        echo -e "${YELLOW}⚠️ La API de OpenAI no está configurada. Las funciones de IA no estarán disponibles.${NC}"
-    fi
-    
-    echo -e "${GREEN}La aplicación está disponible en:${NC}"
-    echo -e "  URL generada por Easypanel (consulta tu panel de control, por ejemplo: https://scripts-tools.ppwqpd.easypanel.host/)"
-
     # Verificar estado de salud del backend
     echo -e "\n${GREEN}Verificando estado de salud del backend...${NC}"
     sleep 5
-    curl -s http://localhost:8088/health | grep -q "healthy" && \
-        echo -e "${GREEN}✅ Backend funcionando correctamente${NC}" || \
+    if curl -s http://localhost:8088/health | grep -q "healthy"; then
+        echo -e "${GREEN}✅ Backend funcionando correctamente${NC}"
+    else
         echo -e "${RED}❌ Backend no responde correctamente${NC}"
+        echo -e "Verifica los logs con: docker logs insco-app"
+    fi
+    
+    echo -e "\n${GREEN}La aplicación está disponible en:${NC}"
+    echo -e "  Backend API: http://localhost:8088/api/root"
+    echo -e "  Frontend: Configurado con Traefik (consulta tu panel de control)"
 else
     echo -e "${RED}Error: El contenedor no se inició correctamente.${NC}"
     echo -e "Comprueba los logs con: docker compose logs"

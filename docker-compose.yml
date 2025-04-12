@@ -12,17 +12,10 @@ services:
       - ./data:/app/data
       - ./config:/app/config
       - ./backend/config/auth_credentials.json:/app/config/auth_credentials.json
-      - ./backend/config/openapi.json:/app/config/openapi.json
-      - ./backend/config/sttapi.json:/app/config/sttapi.json
-      - ./backend/config/ttsapi.json:/app/config/ttsapi.json
-      - ./backend/config/translator.json:/app/config/translator.json
-      - /tmp:/tmp
-      - /tmp/conversions:/tmp/conversions
     environment:
       - ENVIRONMENT=production
       - TZ=Europe/Madrid
       - PYTHONUNBUFFERED=1
-      - DEBIAN_FRONTEND=noninteractive
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
       interval: 30s

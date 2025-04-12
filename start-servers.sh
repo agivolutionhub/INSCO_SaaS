@@ -7,7 +7,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}=== Iniciando servidores del proyecto INSCO ===${NC}"
+echo -e "${GREEN}=== Iniciando servidores del proyecto INSCO - Versión Mínima ===${NC}"
 
 # Función para verificar si un comando existe
 command_exists() {
@@ -41,14 +41,17 @@ cleanup() {
 # Capturar señales para limpiar procesos al salir
 trap cleanup SIGINT SIGTERM
 
-# Iniciar el backend con Python 3.12
+# Iniciar el backend
 echo -e "${GREEN}Iniciando el servidor backend...${NC}"
 cd backend
-# Activar el entorno virtual
-source venv/bin/activate
-cd ..
-python3.12 -m uvicorn backend.main:app --reload --port 8088 &
+# Activar el entorno virtual si existe
+if [ -d "venv" ]; then
+    source venv/bin/activate
+fi
+# Iniciar el backend usando Python 3 (debería funcionar con cualquier versión reciente)
+python -m uvicorn main:app --reload --host 0.0.0.0 --port 8088 &
 BACKEND_PID=$!
+cd ..
 
 # Verificar que el backend haya iniciado correctamente
 sleep 3
