@@ -12,12 +12,11 @@ NC='\033[0m' # No Color
 
 echo -e "${GREEN}=== DESPLIEGUE MANUAL DE INSCO_SaaS ===${NC}"
 
-# Obtener IP pública (o usar la proporcionada)
+# Usar la IP específica del servidor, o permitir sobreescribirla
 if [ -z "$PUBLIC_IP" ]; then
-    PUBLIC_IP=$(curl -s ifconfig.me)
-    echo -e "${YELLOW}IP detectada: $PUBLIC_IP${NC}"
-    echo -e "${YELLOW}Si esta IP no es correcta, cancela y ejecuta: PUBLIC_IP=tu-ip-real ./deploy-manual.sh${NC}"
-    sleep 3
+    PUBLIC_IP="147.93.85.32"
+    echo -e "${GREEN}IP configurada: $PUBLIC_IP${NC}"
+    echo -e "${YELLOW}Para usar otra IP, ejecuta: PUBLIC_IP=tu-ip-real ./deploy-manual.sh${NC}"
 fi
 
 # Verificar requisitos
@@ -45,7 +44,7 @@ fi
 
 # 4. Configurar CORS en backend para permitir solicitudes del frontend
 echo -e "\n${GREEN}4. Configurando CORS en el backend...${NC}"
-sed -i "s|allow_origins=\[\(.*\)\]|allow_origins=[\"http://localhost:5173\", \"http://localhost:5174\", \"http://localhost:3000\", \"http://localhost:3001\", \"http://$PUBLIC_IP:3001\"]|g" backend/main.py
+sed -i "s|allow_origins=\[\(.*\)\]|allow_origins=[\"http://localhost:5173\", \"http://localhost:5174\", \"http://localhost:3001\", \"http://$PUBLIC_IP:3001\"]|g" backend/main.py
 
 # 5. Crear docker-compose para backend solamente
 echo -e "\n${GREEN}5. Creando configuración para desplegar solo el backend...${NC}"
@@ -105,7 +104,7 @@ for i in {1..10}; do
     sleep 5
 done
 
-# 8. Configurar URL del backend para el frontend
+# 8. Configurar URL del backend para el frontend - usando IP específica
 echo -e "\n${GREEN}8. Configurando URL del backend para el frontend...${NC}"
 echo "VITE_API_URL=http://$PUBLIC_IP:8088/api" > frontend/.env
 echo -e "${GREEN}✓ URL del backend configurada: http://$PUBLIC_IP:8088/api${NC}"
@@ -125,7 +124,7 @@ fi
 # 11. Detener cualquier instancia anterior del frontend
 pkill -f "serve -s dist" || true
 
-# 12. Servir frontend en segundo plano (usando puerto 3001 en lugar de 3000)
+# 12. Servir frontend en segundo plano en puerto 3001
 echo -e "\n${GREEN}10. Iniciando servidor frontend en puerto 3001...${NC}"
 nohup serve -s dist -l 3001 > ../frontend.log 2>&1 &
 FRONTEND_PID=$!
