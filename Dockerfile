@@ -38,7 +38,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-transport-https \
     ca-certificates \
     gnupg \
-    dbus-x11 \
+    libx11-6 \
+    libxrender1 \
+    libfontconfig1 \
+    fontconfig \
+    libsm6 \
+    libice6 \
+    libglib2.0-0 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -76,4 +82,4 @@ EXPOSE 8088
 ENV ENVIRONMENT=production
 
 # Comando para iniciar el backend
-CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8088"] 
+CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8088", "--log-level", "debug"] 
