@@ -20,6 +20,8 @@ services:
       - TZ=Europe/Madrid
       - PYTHONUNBUFFERED=1
       - DEBIAN_FRONTEND=noninteractive
+    env_file:
+      - ./backend/config/.env
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
       interval: 30s

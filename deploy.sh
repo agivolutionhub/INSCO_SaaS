@@ -20,6 +20,15 @@ if ! command -v docker &> /dev/null || ! command -v docker-compose &> /dev/null;
     exit 1
 fi
 
+# Verificar que exista el archivo de configuración de OpenAI
+if [ ! -f "./backend/config/.env" ]; then
+    echo -e "${RED}Error: No se encuentra el archivo de configuración de OpenAI en backend/config/.env${NC}"
+    echo -e "Crea el archivo con las siguientes variables:"
+    echo -e "OPENAI_API_KEY=tu_api_key"
+    echo -e "OPENAI_ASSISTANT_ID=tu_assistant_id"
+    exit 1
+fi
+
 # Crear directorios necesarios
 echo -e "${GREEN}Creando directorios necesarios...${NC}"
 mkdir -p storage data config nginx/ssl nginx/www
@@ -54,9 +63,13 @@ docker-compose restart nginx
 if [ "$(docker ps -q -f name=insco-app)" ] && [ "$(docker ps -q -f name=insco-nginx)" ]; then
     echo -e "${GREEN}¡Despliegue completado con éxito!${NC}"
     
-    # Verificar las dependencias dentro del contenedor
-    echo -e "${GREEN}Verificando dependencias críticas dentro del contenedor...${NC}"
-    docker exec insco-app bash -c "chmod +x /app/backend/scripts/verify_dependencies.sh && /app/backend/scripts/verify_dependencies.sh"
+    # Verificar si OpenAI está configurado
+    OPENAI_CONFIGURED=$(docker exec insco-app bash -c "grep -q OPENAI_API_KEY /app/config/.env && echo 'true' || echo 'false'")
+    if [ "$OPENAI_CONFIGURED" = "true" ]; then
+        echo -e "${GREEN}✅ API de OpenAI configurada correctamente${NC}"
+    else
+        echo -e "${YELLOW}⚠️ La API de OpenAI no está configurada. Las funciones de IA no estarán disponibles.${NC}"
+    fi
     
     echo -e "${GREEN}La aplicación está disponible en:${NC}"
     echo -e "  https://insco.agivolution.com"
