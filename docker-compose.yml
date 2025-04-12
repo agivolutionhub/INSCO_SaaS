@@ -31,6 +31,9 @@ services:
       start_period: 40s
     labels:
       - "traefik.enable=true"
+      - "traefik.http.routers.insco-app.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.insco-app.entrypoints=websecure"
+      - "traefik.http.routers.insco-app.tls=true"
       - "traefik.http.services.insco-app.loadbalancer.server.port=8088"
 
 volumes:
