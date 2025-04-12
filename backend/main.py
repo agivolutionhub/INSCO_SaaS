@@ -4,13 +4,23 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from pathlib import Path
 import time
+import sys
 from rich.console import Console
+
+# Añadir directorio actual al path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+# Importar el script de configuración de entorno
+from scripts.setup_env import setup_env
 
 # Consola para logs
 console = Console()
 
+# Configurar variables de entorno
+env_vars = setup_env()
+
 # Crear una instancia de FastAPI
-app = FastAPI(title="INSCO API", description="API mínima para el proyecto INSCO")
+app = FastAPI(title="INSCO API", description="API para el proyecto INSCO")
 
 # Configurar CORS
 app.add_middleware(
@@ -31,8 +41,8 @@ STORAGE_DIR = BASE_DIR / "storage"
 # Crear directorios
 TMP_DIR.mkdir(parents=True, exist_ok=True)
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-console.print(f"Directorio temporal: {TMP_DIR}")
-console.print(f"Directorio de almacenamiento: {STORAGE_DIR}")
+console.print(f"[green]Directorio temporal:[/green] {TMP_DIR}")
+console.print(f"[green]Directorio de almacenamiento:[/green] {STORAGE_DIR}")
 
 # Montar directorios estáticos
 app.mount("/tmp", StaticFiles(directory=TMP_DIR), name="temp")
@@ -48,7 +58,8 @@ async def health_check():
     health_status = {
         "status": "healthy",
         "time": time.time(),
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "openai_configured": bool(env_vars.get("OPENAI_API_KEY"))
     }
     
     # Verificar que los directorios críticos sean accesibles
@@ -72,7 +83,8 @@ async def health_check():
     return health_status
 
 # Mostrar información de inicio
-console.print("[bold green]API INSCO mínima iniciada correctamente[/bold green]")
-console.print(f"[green]Endpoints disponibles:[/green]")
-console.print(f"  • [bold]/api/root[/bold] - Endpoint principal")
-console.print(f"  • [bold]/health[/bold] - Verificación de salud") 
+console.print("[bold green]API INSCO iniciada correctamente[/bold green]")
+console.print("[green]Endpoints disponibles:[/green]")
+console.print("  • [bold]/api/root[/bold] - Endpoint principal")
+console.print("  • [bold]/health[/bold] - Verificación de salud")
+console.print(f"[green]OpenAI configurado:[/green] {'✅' if env_vars.get('OPENAI_API_KEY') else '❌'}") 

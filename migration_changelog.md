@@ -30,4 +30,21 @@ Cada fase será documentada con su fecha, cambios realizados y resultado.
   - Backend mínimo funcional con FastAPI
   - Endpoints básicos implementados
   - Scripts de despliegue adaptados
-- **Resultado**: Backend funcionando correctamente en local y en producción 
+- **Resultado**: Backend funcionando correctamente en local y en producción
+
+### Fase 1: Estructura básica y configuración de entorno
+
+- **Fecha**: 12-04-2025
+- **Estado**: En desarrollo
+- **Cambios**:
+  - Creada estructura base de directorios (routes, services, scripts)
+  - Migrado setup_env.py para cargar credenciales de OpenAI
+  - Creado script verify_dependencies.sh básico
+  - Actualizado main.py para integrar setup_env.py
+- **Archivos migrados**:
+  - scripts/setup_env.py
+  - scripts/verify_dependencies.sh
+- **Simplificaciones**:
+  - Eliminadas configuraciones de APIs adicionales (STT, TTS)
+  - Reducido a solo gestión de credenciales básicas de OpenAI
+- **Próximos pasos**: Añadir utilidades básicas para manejo de archivos 
