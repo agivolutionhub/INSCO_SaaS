@@ -26,6 +26,70 @@ for env_path in env_paths:
 # Configuración de logging
 logger = logging.getLogger("video_translate_service")
 
+# Cargar credenciales de OpenAI desde JSON
+def load_openai_credentials():
+    """Carga las credenciales de OpenAI desde el archivo JSON"""
+    credentials_paths = [
+        Path(__file__).parent.parent / "config" / "auth_credentials.json",
+        Path("/app/config/auth_credentials.json"),
+        Path("/app/backend/config/auth_credentials.json"),
+    ]
+    
+    api_key = None
+    assistant_id = None
+    
+    for path in credentials_paths:
+        if not path.exists():
+            continue
+            
+        try:
+            logger.info(f"Cargando credenciales desde: {path}")
+            with open(path, "r") as f:
+                credentials = json.load(f)
+            
+            if "openai" in credentials:
+                if "api_key" in credentials["openai"]:
+                    api_key = credentials["openai"]["api_key"]
+                    os.environ["OPENAI_API_KEY"] = api_key
+                    
+                if "assistant_id" in credentials["openai"]:
+                    assistant_id = credentials["openai"]["assistant_id"]
+                    os.environ["OPENAI_ASSISTANT_ID"] = assistant_id
+                    
+            if api_key and assistant_id:
+                logger.info("Credenciales de OpenAI cargadas correctamente")
+                return True
+        except Exception as e:
+            logger.error(f"Error cargando credenciales desde {path}: {str(e)}")
+    
+    # Si no se encontraron credenciales, intentar cargar desde openapi.json como respaldo
+    try:
+        openapi_path = Path(__file__).parent.parent / "config" / "openapi.json"
+        if openapi_path.exists():
+            logger.info(f"Intentando cargar API key desde {openapi_path}")
+            with open(openapi_path, "r") as f:
+                config = json.load(f)
+            
+            if "openai" in config and "api_key" in config["openai"]:
+                api_key = config["openai"]["api_key"]
+                os.environ["OPENAI_API_KEY"] = api_key
+                logger.info("API key cargada desde openapi.json")
+                
+                # Para el assistant_id, usar uno predeterminado si no se encuentra
+                if not assistant_id:
+                    assistant_id = "asst_mBShBt93TIVI0PKE7zsNO0eZ"  # Valor predeterminado
+                    os.environ["OPENAI_ASSISTANT_ID"] = assistant_id
+                    logger.info("Usando assistant_id predeterminado")
+                
+                return True
+    except Exception as e:
+        logger.error(f"Error cargando respaldo desde openapi.json: {str(e)}")
+    
+    return False
+
+# Cargar credenciales
+load_openai_credentials()
+
 # Configuración de OpenAI
 ASSISTANT_ID = os.getenv("OPENAI_ASSISTANT_ID", "asst_mBShBt93TIVI0PKE7zsNO0eZ")
 OPENAI_BETA_HEADER = {"OpenAI-Beta": "assistants=v2"}

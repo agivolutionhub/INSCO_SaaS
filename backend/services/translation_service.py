@@ -7,19 +7,51 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from pptx import Presentation
 
-# Cargar variables de entorno desde múltiples ubicaciones posibles
-env_paths = [
-    Path(__file__).parent.parent / "config" / ".env",  # Ruta original
-    Path("/app/.env"),                                 # Ruta alternativa en el contenedor
-    Path("/app/config/.env"),                          # Ruta del volumen montado
-]
+# Cargar credenciales de OpenAI desde JSON
+def load_openai_credentials():
+    """Carga las credenciales de OpenAI desde el archivo JSON"""
+    credentials_paths = [
+        Path(__file__).parent.parent / "config" / "auth_credentials.json",
+        Path("/app/config/auth_credentials.json"),
+        Path("/app/backend/config/auth_credentials.json"),
+    ]
+    
+    for path in credentials_paths:
+        if not path.exists():
+            continue
+            
+        try:
+            print(f"Cargando credenciales desde: {path}")
+            with open(path, "r") as f:
+                credentials = json.load(f)
+            
+            if "openai" in credentials:
+                if "api_key" in credentials["openai"]:
+                    os.environ["OPENAI_API_KEY"] = credentials["openai"]["api_key"]
+                if "assistant_id" in credentials["openai"]:
+                    os.environ["OPENAI_ASSISTANT_ID"] = credentials["openai"]["assistant_id"]
+                return True
+        except Exception as e:
+            print(f"Error cargando credenciales desde {path}: {str(e)}")
+    
+    # Intentar cargar desde openapi.json como respaldo
+    try:
+        openapi_path = Path(__file__).parent.parent / "config" / "openapi.json"
+        if openapi_path.exists():
+            with open(openapi_path, "r") as f:
+                config = json.load(f)
+            
+            if "openai" in config and "api_key" in config["openai"]:
+                os.environ["OPENAI_API_KEY"] = config["openai"]["api_key"]
+                print("API key cargada desde openapi.json")
+                return True
+    except Exception as e:
+        print(f"Error cargando respaldo desde openapi.json: {str(e)}")
+    
+    return False
 
-# Intentar cargar de cada ubicación
-for env_path in env_paths:
-    if env_path.exists():
-        print(f"[translation_service] Cargando variables desde: {env_path}")
-        load_dotenv(env_path)
-        break
+# Cargar credenciales
+load_openai_credentials()
 
 # Constantes
 CACHE_FILE = Path(__file__).parent.parent / "config" / "cache" / "translations.json"
@@ -29,6 +61,9 @@ MAX_WAIT = 30.0
 BACKOFF = 2.0
 ASSISTANT_ID = os.environ.get("OPENAI_ASSISTANT_ID", "asst_mBShBt93TIVI0PKE7zsNO0eZ")
 OPENAI_BETA_HEADER = {"OpenAI-Beta": "assistants=v2"}
+MAX_TOKENS = 4096
+DEFAULT_SYSTEM_PROMPT = """Eres un traductor técnico profesional especializado en la industria del cartón ondulado. 
+Traduce el texto del español al {target_language} con precisión técnica, manteniendo terminología específica y formato."""
 
 class TranslationCache:
     def __init__(self):

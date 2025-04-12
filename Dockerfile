@@ -33,10 +33,7 @@ COPY backend/ ./backend/
 COPY --from=frontend-builder /app/frontend/dist /app/static
 RUN mkdir -p /app/storage /app/tmp && chmod -R 777 /app/storage /app/tmp
 
-# Copiar el archivo .env (será sobrescrito por el volume mount en docker-compose)
-COPY backend/config/.env /app/.env
-
-# Configurar variables de entorno para OpenAI
+# Configurar variables de entorno predeterminadas vacías (serán sobrescritas por el volume mount o el script de configuración)
 ENV OPENAI_API_KEY=""
 ENV OPENAI_ASSISTANT_ID=""
 

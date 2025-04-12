@@ -12,12 +12,11 @@ def setup_env():
     
     console.print("[bold green]Configurando variables de entorno para OpenAI...[/bold green]")
     
-    # Posibles ubicaciones del archivo .env
-    env_paths = [
-        Path("/app/.env"),
-        Path("/app/config/.env"),
-        Path("/app/backend/config/.env"),
-        Path(__file__).parent.parent / "config" / ".env",
+    # Posibles ubicaciones del archivo de credenciales
+    credentials_paths = [
+        Path("/app/config/auth_credentials.json"),
+        Path("/app/backend/config/auth_credentials.json"),
+        Path(__file__).parent.parent / "config" / "auth_credentials.json",
     ]
     
     # Posibles ubicaciones de los archivos JSON de configuración
@@ -56,33 +55,34 @@ def setup_env():
             console.print(f"✅ Variable {var} ya configurada en el entorno")
             variables[var] = value
     
-    # 2. Buscar en archivos .env
-    for env_path in env_paths:
-        if not env_path.exists():
-            continue
-        
-        console.print(f"📄 Leyendo archivo: {env_path}")
-        try:
-            with open(env_path, "r") as f:
-                for line in f:
-                    if not line.strip() or line.strip().startswith("#"):
-                        continue
+    # 2. Buscar en archivo auth_credentials.json
+    if not variables["OPENAI_API_KEY"] or not variables["OPENAI_ASSISTANT_ID"]:
+        for credentials_path in credentials_paths:
+            if not credentials_path.exists():
+                continue
+            
+            try:
+                console.print(f"📄 Leyendo credenciales desde: {credentials_path}")
+                with open(credentials_path, "r") as f:
+                    credentials = json.load(f)
+                
+                if "openai" in credentials:
+                    if "api_key" in credentials["openai"] and not variables["OPENAI_API_KEY"]:
+                        variables["OPENAI_API_KEY"] = credentials["openai"]["api_key"]
+                        os.environ["OPENAI_API_KEY"] = credentials["openai"]["api_key"]
+                        console.print(f"✅ OPENAI_API_KEY configurada desde {credentials_path}")
                     
-                    try:
-                        key, value = line.strip().split("=", 1)
-                        key = key.strip()
-                        value = value.strip().strip('"').strip("'")
-                        
-                        if key in variables and not variables[key]:
-                            variables[key] = value
-                            os.environ[key] = value
-                            console.print(f"✅ Variable {key} configurada desde {env_path}")
-                    except ValueError:
-                        console.print(f"⚠️ Línea mal formateada: {line.strip()}")
-        except Exception as e:
-            console.print(f"❌ Error leyendo {env_path}: {str(e)}")
+                    if "assistant_id" in credentials["openai"] and not variables["OPENAI_ASSISTANT_ID"]:
+                        variables["OPENAI_ASSISTANT_ID"] = credentials["openai"]["assistant_id"]
+                        os.environ["OPENAI_ASSISTANT_ID"] = credentials["openai"]["assistant_id"]
+                        console.print(f"✅ OPENAI_ASSISTANT_ID configurada desde {credentials_path}")
+                
+                if variables["OPENAI_API_KEY"] and variables["OPENAI_ASSISTANT_ID"]:
+                    break
+            except Exception as e:
+                console.print(f"❌ Error leyendo {credentials_path}: {str(e)}")
     
-    # 3. Buscar en archivos JSON de configuración
+    # 3. Buscar en archivos JSON de configuración como respaldo
     console.print("\n[bold green]Buscando claves API en archivos JSON de configuración...[/bold green]")
     
     # Comprobar openapi.json primero para OPENAI_API_KEY

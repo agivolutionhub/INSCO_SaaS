@@ -13,7 +13,7 @@ services:
       - ./storage:/app/storage
       - ./data:/app/data
       - ./config:/app/config
-      - ./backend/config/.env:/app/.env
+      - ./backend/config/auth_credentials.json:/app/config/auth_credentials.json
       - ./backend/config/openapi.json:/app/config/openapi.json
       - ./backend/config/sttapi.json:/app/config/sttapi.json
       - ./backend/config/ttsapi.json:/app/config/ttsapi.json
@@ -25,10 +25,6 @@ services:
       - TZ=Europe/Madrid
       - PYTHONUNBUFFERED=1
       - DEBIAN_FRONTEND=noninteractive
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_ASSISTANT_ID=${OPENAI_ASSISTANT_ID}
-    env_file:
-      - ./backend/config/.env
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
       interval: 30s

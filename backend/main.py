@@ -20,34 +20,58 @@ from pydantic.config import ConfigDict
 # Configurar Pydantic para evitar advertencias con model_name
 model_config = ConfigDict(protected_namespaces=())
 
-# Cargar variables de entorno desde múltiples ubicaciones posibles
-env_paths = [
-    Path(__file__).resolve().parent / "config" / ".env",  # Ruta original
-    Path("/app/.env"),                                    # Ruta alternativa en el contenedor
-    Path("/app/config/.env"),                             # Ruta del volumen montado
-    Path("./backend/config/.env"),                        # Ruta desde la raíz del proyecto
-]
+# Cargar variables de entorno desde el archivo de credenciales JSON
+def load_credentials():
+    """Carga las credenciales de OpenAI desde el archivo JSON"""
+    credentials_paths = [
+        Path(__file__).resolve().parent / "config" / "auth_credentials.json",  # Ruta original
+        Path("/app/config/auth_credentials.json"),                             # Ruta en el contenedor
+        Path("/app/backend/config/auth_credentials.json"),                     # Ruta alternativa
+    ]
+    
+    for path in credentials_paths:
+        if path.exists():
+            print(f"Cargando credenciales desde: {path}")
+            try:
+                with open(path, "r") as f:
+                    credentials = json.load(f)
+                
+                if "openai" in credentials:
+                    if "api_key" in credentials["openai"]:
+                        os.environ["OPENAI_API_KEY"] = credentials["openai"]["api_key"]
+                    if "assistant_id" in credentials["openai"]:
+                        os.environ["OPENAI_ASSISTANT_ID"] = credentials["openai"]["assistant_id"]
+                
+                return True
+            except Exception as e:
+                print(f"Error al cargar credenciales desde {path}: {e}")
+    
+    print("⚠️ No se encontró archivo de credenciales en ninguna ubicación conocida")
+    return False
 
-# Intentar cargar de cada ubicación
-for env_path in env_paths:
-    if env_path.exists():
-        print(f"Cargando variables de entorno desde: {env_path}")
-        load_dotenv(dotenv_path=env_path)
-        break
-else:
-    print("⚠️ No se encontró archivo .env en ninguna ubicación conocida")
+# Intentar cargar credenciales
+load_credentials()
 
-# Si las variables no están en el entorno, intentar cargarlas explícitamente del archivo
-if not os.getenv("OPENAI_API_KEY") and Path("/app/.env").exists():
-    try:
-        with open("/app/.env", "r") as f:
-            for line in f:
-                if line.strip() and not line.startswith("#"):
-                    key, value = line.strip().split("=", 1)
-                    os.environ[key] = value
-        print("Variables cargadas manualmente del archivo .env")
-    except Exception as e:
-        print(f"Error al cargar variables manualmente: {e}")
+# Si las variables no están en el entorno, intentar cargarlas de otras fuentes
+if not os.getenv("OPENAI_API_KEY"):
+    # Intentar cargar desde openapi.json como respaldo
+    openapi_paths = [
+        Path(__file__).resolve().parent / "config" / "openapi.json",
+        Path("/app/config/openapi.json"),
+    ]
+    
+    for path in openapi_paths:
+        if path.exists():
+            try:
+                with open(path, "r") as f:
+                    config = json.load(f)
+                
+                if "openai" in config and "api_key" in config["openai"]:
+                    os.environ["OPENAI_API_KEY"] = config["openai"]["api_key"]
+                    print(f"OPENAI_API_KEY cargada desde {path} (respaldo)")
+                    break
+            except Exception as e:
+                print(f"Error al cargar respaldo desde {path}: {e}")
 
 # Consola para logs
 console = Console()
