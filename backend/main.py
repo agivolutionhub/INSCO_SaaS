@@ -135,19 +135,22 @@ async def health_check():
         health_status["error"] = str(e)
         return JSONResponse(status_code=500, content=health_status)
     
-    # Intenta verificar LibreOffice si está siendo utilizado
+    # Verificar conectividad con el servicio MicroREST para conversión de PPTX
     try:
-        import subprocess
-        result = subprocess.run(["libreoffice", "--version", "--headless"], 
-                              capture_output=True, text=True, timeout=5)
-        health_status["services"]["libreoffice"] = result.returncode == 0
-        if result.returncode != 0:
+        import requests
+        response = requests.get("http://147.93.85.32:8090/openapi.json", timeout=5)
+        health_status["services"]["microrest_pptx"] = response.status_code == 200
+        if response.status_code != 200:
             health_status["status"] = "degraded"
-            health_status["libreoffice_error"] = result.stderr
+            health_status["microrest_error"] = f"Status code: {response.status_code}"
+        else:
+            # El servicio está activo, por lo que marcamos el servicio de conversión como activo
+            health_status["services"]["libreoffice"] = True
     except Exception as e:
+        health_status["services"]["microrest_pptx"] = False
         health_status["services"]["libreoffice"] = False
         health_status["status"] = "degraded"
-        health_status["libreoffice_error"] = str(e)
+        health_status["microrest_error"] = str(e)
     
     return health_status
 

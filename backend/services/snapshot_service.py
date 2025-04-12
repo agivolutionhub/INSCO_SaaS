@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import logging
 from pathlib import Path
-import os, shutil
+import os, shutil, tempfile, zipfile
 from typing import Dict, Optional, Union
 import requests
 import json
@@ -49,43 +49,59 @@ def extract_pptx_slides(
     
     stats = {"slides": 0, "generated_files": []}
     
-    # Preparar rutas para el microservicio
-    shared_temp_dir = Path("/tmp/conversions")
-    shared_temp_dir.mkdir(parents=True, exist_ok=True)
-    
-    shared_output_dir = shared_temp_dir / "output"
-    shared_output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Copiar archivo PPTX al directorio compartido
-    shared_pptx_path = shared_temp_dir / pptx_path.name
-    shutil.copy2(pptx_path, shared_pptx_path)
-    
     try:
-        # Llamar al microservicio REST
-        logger.info(f"Llamando al microservicio para convertir {shared_pptx_path}")
+        # Enviar directamente el archivo PPTX al microservicio
+        logger.info(f"Enviando archivo PPTX al microservicio: {pptx_path}")
         
-        # Enviar parámetros como query parameters en la URL
-        response = requests.post(
-            f"{MICROREST_URL}?input_path={str(shared_pptx_path)}&output_dir={str(shared_output_dir)}"
-        )
+        with open(pptx_path, "rb") as file:
+            files = {"file": (pptx_path.name, file, 'application/vnd.openxmlformats-officedocument.presentationml.presentation')}
+            
+            response = requests.post(
+                MICROREST_URL,
+                files=files
+            )
         
         response.raise_for_status()
-        result = response.json()
         
-        if result["status"] != "success":
-            raise RuntimeError(f"Error en el microservicio: {result.get('error', 'Unknown error')}")
+        # Determinar el tipo de respuesta basado en el Content-Type
+        content_type = response.headers.get("Content-Type")
+        logger.info(f"Respuesta recibida del microservicio. Content-Type: {content_type}")
+        
+        if content_type == "application/zip":
+            # La respuesta es un ZIP con múltiples imágenes
+            temp_zip = output_dir / "slides.zip"
             
-        # Copiar imágenes generadas al directorio final
-        for i, file_name in enumerate(result["output_files"], 1):
-            source_file = shared_output_dir / file_name
-            if not source_file.exists():
-                logger.warning(f"Archivo de origen no encontrado: {source_file}")
-                continue
+            # Guardar el archivo ZIP
+            with open(temp_zip, "wb") as f:
+                f.write(response.content)
+            
+            # Extraer las imágenes del ZIP
+            with zipfile.ZipFile(temp_zip, 'r') as zip_ref:
+                zip_ref.extractall(output_dir)
+            
+            # Eliminar el ZIP temporal
+            temp_zip.unlink()
+            
+            # Listar y renombrar las imágenes extraídas
+            for i, img_file in enumerate(sorted(output_dir.glob("*.png")), 1):
+                new_name = output_dir / f"slide_{i:03d}.{format}"
+                img_file.rename(new_name)
+                stats["generated_files"].append(str(new_name))
+                stats["slides"] += 1
                 
-            output_file = output_dir / f"slide_{i:03d}.{format}"
-            shutil.copy2(source_file, output_file)
+        elif content_type == "image/png":
+            # La respuesta es una única imagen
+            output_file = output_dir / f"slide_001.{format}"
+            
+            with open(output_file, "wb") as f:
+                f.write(response.content)
+            
             stats["generated_files"].append(str(output_file))
-            stats["slides"] += 1
+            stats["slides"] = 1
+            
+        else:
+            logger.error(f"Tipo de contenido inesperado: {content_type}")
+            raise ValueError(f"Tipo de contenido inesperado del microservicio: {content_type}")
             
         logger.info(f"Generadas {stats['slides']} imágenes en {output_dir}")
     except requests.RequestException as e:
@@ -94,15 +110,6 @@ def extract_pptx_slides(
     except Exception as e:
         logger.error(f"Error al extraer diapositivas: {str(e)}")
         raise
-    finally:
-        try: 
-            # Limpiar archivos temporales
-            for file in shared_output_dir.glob("*"):
-                file.unlink()
-            if shared_pptx_path.exists():
-                shared_pptx_path.unlink()
-        except Exception as e: 
-            logger.warning(f"No se pudieron eliminar archivos temporales: {str(e)}")
     
     return {
         "slides": stats["slides"],
