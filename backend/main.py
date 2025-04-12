@@ -154,7 +154,7 @@ app.include_router(video_cut_router)
 app.include_router(video_montage_router)
 app.include_router(video_translate_router)
 
-@app.get("/")
+@app.get("/api/root")
 async def root():
     return {"message": "Bienvenido a la API de INSCO"}
 
