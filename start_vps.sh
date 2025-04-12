@@ -46,8 +46,24 @@ trap cleanup SIGINT SIGTERM
 
 # Configurar URL de API para el frontend
 echo -e "${GREEN}Configurando URL de la API para el frontend...${NC}"
-echo "VITE_API_URL=http://$VPS_IP:8088/api" > frontend/.env
-echo -e "${GREEN}✓ API URL configurada: http://$VPS_IP:8088/api${NC}"
+
+ENV_FILE="frontend/.env"
+if [ -f "$ENV_FILE" ]; then
+    echo -e "${YELLOW}El archivo .env ya existe. Contenido actual:${NC}"
+    cat "$ENV_FILE"
+    echo ""
+    read -p "¿Quieres sobrescribirlo con la configuración para el VPS? (s/n): " confirm
+    if [[ $confirm == [sS] ]]; then
+        echo "VITE_API_URL=http://$VPS_IP:8088/api" > "$ENV_FILE"
+        echo -e "${GREEN}✓ API URL configurada: http://$VPS_IP:8088/api${NC}"
+    else
+        echo -e "${YELLOW}Se conserva el archivo .env existente${NC}"
+    fi
+else
+    echo "VITE_API_URL=http://$VPS_IP:8088/api" > "$ENV_FILE"
+    echo -e "${GREEN}✓ API URL configurada: http://$VPS_IP:8088/api${NC}"
+    echo -e "${YELLOW}NOTA: El archivo .env está en .gitignore, no se subirá a Git${NC}"
+fi
 
 # Iniciar el backend
 echo -e "${GREEN}Iniciando el servidor backend...${NC}"
