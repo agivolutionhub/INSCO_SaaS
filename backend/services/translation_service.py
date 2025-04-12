@@ -112,13 +112,24 @@ class TranslationCache:
         }
 
 class Translator:
-    def __init__(self, target_language="en", use_cache=True):
-        self.target_language = target_language
+    def __init__(self, system_message=None, max_retries=3, rate_limit_delay=1.0):
+        """Inicializa el traductor."""
+        self.max_retries = max_retries
+        self.system_message = system_message or "Eres un asistente de traducción profesional."
+        self.retry_delay = rate_limit_delay
+        self.cache = TranslationCache()
         
-        # Inicializar cliente OpenAI sin configuración de proxies
-        self.client = OpenAI(api_key=self._get_api_key())
+        # Cargar API key y configuración de OpenAI
+        try:
+            api_key = self._get_api_key()
+            self.client = OpenAI(api_key=api_key)
+            self.model = "gpt-3.5-turbo"
+            self.enable_logging = True
+        except Exception as e:
+            print(f"Error al inicializar el cliente OpenAI: {str(e)}")
+            self.client = None
+            self.model = None
         self.current_thread = None
-        self.cache = TranslationCache() if use_cache else None
         self.stats = {"texts": 0, "calls": 0, "duplicate_texts": 0, "retries": 0, "retry_success": 0, "errors": 0}
         self.token_stats = {"input_tokens": 0, "output_tokens": 0, "cached_input_tokens": 0}
         self._test_connection()
@@ -138,7 +149,7 @@ class Translator:
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": f"Traduce el siguiente texto del español al {self.target_language}:"},
+                    {"role": "system", "content": "Traduce el siguiente texto del español al inglés:"},
                     {"role": "user", "content": "Hola mundo"}
                 ],
                 temperature=0.3
@@ -250,7 +261,7 @@ class Translator:
         
         retries, wait_time = 0, BASE_WAIT
         
-        while retries <= MAX_RETRIES:
+        while retries <= self.max_retries:
             try:
                 # Crear un thread nuevo
                 thread = self.client.beta.threads.create(
@@ -333,11 +344,11 @@ class Translator:
                 error_message = str(e)
                 rate_limit = any(msg in error_message.lower() for msg in ["rate limit", "rate_limit", "too_many_requests"])
                 
-                if rate_limit and retries < MAX_RETRIES:
+                if rate_limit and retries < self.max_retries:
                     retries += 1
                     self.stats["retries"] += 1
                     wait_time = min(wait_time * BACKOFF, MAX_WAIT)
-                    print(f"⚠️ Rate limit detectado. Reintentando en {wait_time:.2f}s ({retries}/{MAX_RETRIES})...")
+                    print(f"⚠️ Rate limit detectado. Reintentando en {wait_time:.2f}s ({retries}/{self.max_retries})...")
                     time.sleep(wait_time)
                     continue
                 
@@ -347,8 +358,8 @@ class Translator:
     
     def _get_translation_prompt(self):
         """Obtiene el prompt de sistema para la traducción"""
-        return f"""Eres un traductor profesional especializado en la industria del cartón ondulado.
-Traduce los siguientes textos del español al {self.target_language}.
+        return """Eres un traductor profesional especializado en la industria del cartón ondulado.
+Traduce los siguientes textos del español al inglés.
 Responde solo con la traducción de cada texto, manteniendo la numeración original en formato [número] texto_traducido.
 No expliques ni comentes tus traducciones. No añadas información adicional.
 Respeta el formato y la estructura del texto original."""

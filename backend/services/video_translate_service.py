@@ -99,8 +99,13 @@ OPENAI_BETA_HEADER = {"OpenAI-Beta": "assistants=v2"}
 def test_openai_connection():
     """Verifica la conexión con OpenAI y la configuración del asistente."""
     try:
-        # Inicializar cliente
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            logger.error("❌ API key de OpenAI no encontrada")
+            return False
+            
+        # Inicializar cliente sin el parámetro proxies
+        client = OpenAI(api_key=api_key)
         
         # Probar una llamada simple
         response = client.chat.completions.create(
