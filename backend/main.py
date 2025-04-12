@@ -15,6 +15,10 @@ from typing import List, Dict, Optional, Any
 from rich.console import Console
 from dotenv import load_dotenv
 import asyncio
+from pydantic.config import ConfigDict
+
+# Configurar Pydantic para evitar advertencias con model_name
+model_config = ConfigDict(protected_namespaces=())
 
 # Cargar variables de entorno desde múltiples ubicaciones posibles
 env_paths = [

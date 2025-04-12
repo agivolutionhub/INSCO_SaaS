@@ -2,6 +2,7 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
+from pydantic.config import ConfigDict
 import os
 import json
 import uuid
@@ -32,6 +33,9 @@ class TranslationRequest(BaseModel):
     text: str
     target_language: str = "English"
     original_language: Optional[str] = None
+    
+    # Configurar para evitar advertencias con namespaces protegidos
+    model_config = ConfigDict(protected_namespaces=())
 
 # Idiomas disponibles
 AVAILABLE_LANGUAGES = [

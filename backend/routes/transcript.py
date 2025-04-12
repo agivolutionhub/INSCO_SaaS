@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse, FileResponse
 import os, shutil, uuid, json, time
 from pathlib import Path
 from typing import List, Dict, Optional, Any
+from pydantic.config import ConfigDict
 
 # Ajustar path para importar servicios
 import sys
@@ -22,6 +23,9 @@ JOB_TIMEOUT = int(os.environ.get("TRANSCRIPT_JOB_TIMEOUT", 1800))  # 30 minutos
 
 # Control de trabajos
 active_jobs = {}
+
+# Configuración global para Pydantic para evitar advertencias con model_name
+model_config = ConfigDict(protected_namespaces=())
 
 # Utilidades de validación
 def validate_video_file(file: UploadFile) -> None:
