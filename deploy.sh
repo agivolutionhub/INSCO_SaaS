@@ -41,6 +41,11 @@ docker-compose up --build -d
 # Verificar que los contenedores estén funcionando
 if [ "$(docker ps -q -f name=insco-app)" ] && [ "$(docker ps -q -f name=insco-nginx)" ]; then
     echo -e "${GREEN}¡Despliegue completado con éxito!${NC}"
+    
+    # Verificar las dependencias dentro del contenedor
+    echo -e "${GREEN}Verificando dependencias críticas dentro del contenedor...${NC}"
+    docker exec insco-app bash -c "chmod +x /app/backend/scripts/verify_dependencies.sh && /app/backend/scripts/verify_dependencies.sh"
+    
     echo -e "${GREEN}La aplicación está disponible en:${NC}"
     echo -e "  https://insco.agivolution.com"
     echo -e "${YELLOW}Nota: Asegúrate de que el dominio apunte a la IP del servidor${NC}"

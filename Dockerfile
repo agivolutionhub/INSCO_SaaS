@@ -21,10 +21,27 @@ FROM python:3.12-slim
 # Instalar dependencias del sistema necesarias
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice \
+    libreoffice-script-provider-python \
+    python3-uno \
+    unoconv \
     ffmpeg \
     poppler-utils \
+    curl \
+    wget \
+    software-properties-common \
+    apt-transport-https \
+    ca-certificates \
+    gnupg \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Configurar entorno LibreOffice para modo headless
+ENV UNO_PATH="/usr/lib/libreoffice/program" \
+    URE_BOOTSTRAP="file:///usr/lib/libreoffice/program/fundamental.ini" \
+    PYTHONPATH="/usr/lib/libreoffice/program:$PYTHONPATH"
+
+# Aplicar optimizaciones del sistema
+RUN echo 'vm.overcommit_memory=1' >> /etc/sysctl.d/99-insco.conf
 
 # Directorio de trabajo para el backend
 WORKDIR /app
