@@ -69,11 +69,6 @@ COPY --from=frontend-builder /app/frontend/dist /app/static
 # Crear directorios necesarios
 RUN mkdir -p /app/storage /app/tmp && chmod -R 777 /app/storage /app/tmp
 
-# Verificar que LibreOffice funciona en modo headless
-RUN echo "Comprobando instalación de LibreOffice..." \
-    && libreoffice --version --headless \
-    && echo "LibreOffice instalado correctamente."
-
 # Exponer el puerto del backend
 EXPOSE 8088
 
