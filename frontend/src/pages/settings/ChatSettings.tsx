@@ -3,7 +3,7 @@ import { chatService } from '../../services/ChatService';
 import { FaSave, FaSync, FaInfoCircle, FaRedo } from 'react-icons/fa';
 
 const ChatSettings: React.FC = () => {
-  const [webhookUrl, setWebhookUrl] = useState('https://workflow.agivolution.com/webhook/auditor');
+  const [webhookUrl, setWebhookUrl] = useState('https://workflow.agivolution.com/webhook/2497811d-dbf1-4538-9b43-f76463cfc1ef');
   const [isSaved, setIsSaved] = useState(false);
   const [isError, setIsError] = useState(false);
   const [testMessage, setTestMessage] = useState('');
@@ -11,7 +11,7 @@ const ChatSettings: React.FC = () => {
 
   // Cargar la URL actual desde el localStorage al montar el componente
   useEffect(() => {
-    const savedUrl = localStorage.getItem('chatWebhookUrl') || 'https://workflow.agivolution.com/webhook/auditor';
+    const savedUrl = localStorage.getItem('chatWebhookUrl') || 'https://workflow.agivolution.com/webhook/2497811d-dbf1-4538-9b43-f76463cfc1ef';
     setWebhookUrl(savedUrl);
     
     // Si hay una URL guardada, configurarla en el servicio
@@ -62,7 +62,7 @@ const ChatSettings: React.FC = () => {
   };
 
   const handleReset = () => {
-    const defaultUrl = 'https://workflow.agivolution.com/webhook/auditor';
+    const defaultUrl = 'https://workflow.agivolution.com/webhook/2497811d-dbf1-4538-9b43-f76463cfc1ef';
     setWebhookUrl(defaultUrl);
     localStorage.setItem('chatWebhookUrl', defaultUrl);
     chatService.setWebhookUrl(defaultUrl);
@@ -100,7 +100,7 @@ const ChatSettings: React.FC = () => {
                 type="text"
                 value={webhookUrl}
                 onChange={(e) => setWebhookUrl(e.target.value)}
-                placeholder="https://workflow.agivolution.com/webhook/auditor"
+                placeholder="https://workflow.agivolution.com/webhook/2497811d-dbf1-4538-9b43-f76463cfc1ef"
                 className={`flex-grow px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
                   isError 
                     ? 'border-red-300 focus:ring-red-500' 
@@ -110,7 +110,7 @@ const ChatSettings: React.FC = () => {
             </div>
             <p className="mt-1 text-xs text-gray-500 flex items-center">
               <FaInfoCircle className="mr-1" />
-              La URL por defecto es: https://workflow.agivolution.com/webhook/auditor
+              La URL por defecto es: https://workflow.agivolution.com/webhook/2497811d-dbf1-4538-9b43-f76463cfc1ef
             </p>
           </div>
           
@@ -173,7 +173,7 @@ const ChatSettings: React.FC = () => {
           
           <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto">
 {`// Request
-GET https://workflow.agivolution.com/webhook/auditor?message=Mensaje del usuario&context=Historial de conversación`}
+GET https://workflow.agivolution.com/webhook/2497811d-dbf1-4538-9b43-f76463cfc1ef?message=Mensaje del usuario&context=Historial de conversación`}
           </pre>
           
           <p>

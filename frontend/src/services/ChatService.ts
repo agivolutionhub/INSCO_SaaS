@@ -13,7 +13,7 @@ interface ChatResponse {
 }
 
 class ChatService {
-  private webhookUrl: string = 'https://workflow.agivolution.com/webhook/auditor';
+  private webhookUrl: string = 'https://workflow.agivolution.com/webhook/2497811d-dbf1-4538-9b43-f76463cfc1ef';
   
   /**
    * Establece la URL del webhook
