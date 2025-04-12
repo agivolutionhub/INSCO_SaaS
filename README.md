@@ -24,4 +24,37 @@ Sistema SaaS para procesamiento y optimización de presentaciones, audio y video
 
 ## Desarrollado por
 
-[AGIVOLUTION](https://www.agivolution.com) - Soluciones tecnológicas para la industria del cartón ondulado 
+[AGIVOLUTION](https://www.agivolution.com) - Soluciones tecnológicas para la industria del cartón ondulado
+
+## Despliegue con Docker
+
+Para desplegar el proyecto con Docker, sigue estos pasos:
+
+1. Prepara el frontend para el despliegue:
+   ```bash
+   ./deploy-frontend.sh
+   ```
+   Este script:
+   - Crea los directorios necesarios para nginx
+   - Genera certificados SSL autofirmados si no existen
+   - Compila el frontend si no está compilado
+   - Copia los archivos compilados al directorio nginx/www
+
+2. Inicia los contenedores:
+   ```bash
+   docker-compose up -d
+   ```
+
+3. Para ver los logs:
+   ```bash
+   docker-compose logs -f
+   ```
+
+4. Para detener los contenedores:
+   ```bash
+   docker-compose down
+   ```
+
+5. La aplicación estará disponible en:
+   - https://localhost (o la IP del servidor donde esté desplegado)
+   - El backend API: https://localhost/api/ 
