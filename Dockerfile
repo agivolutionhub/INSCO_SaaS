@@ -32,6 +32,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
 COPY --from=frontend-builder /app/frontend/dist /app/static
 RUN mkdir -p /app/storage /app/tmp && chmod -R 777 /app/storage /app/tmp
+
+# Copiar el archivo .env (será sobrescrito por el volume mount en docker-compose)
+COPY backend/config/.env /app/.env
+
+# Configurar variables de entorno para OpenAI
+ENV OPENAI_API_KEY=""
+ENV OPENAI_ASSISTANT_ID=""
+
 EXPOSE 8088
 ENV ENVIRONMENT=production
-CMD ["python3", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8088", "--log-level", "debug"] 
+
+# Hacer ejecutable el script de configuración de entorno
+RUN chmod +x /app/backend/scripts/setup_env.py
+
+# Ejecutar el script de configuración de entorno antes de iniciar la aplicación
+CMD python3 /app/backend/scripts/setup_env.py && python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8088 --log-level debug 

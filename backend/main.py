@@ -16,9 +16,34 @@ from rich.console import Console
 from dotenv import load_dotenv
 import asyncio
 
-# Cargar variables de entorno desde .env
-env_path = Path(__file__).resolve().parent / "config" / ".env"
-load_dotenv(dotenv_path=env_path)
+# Cargar variables de entorno desde múltiples ubicaciones posibles
+env_paths = [
+    Path(__file__).resolve().parent / "config" / ".env",  # Ruta original
+    Path("/app/.env"),                                    # Ruta alternativa en el contenedor
+    Path("/app/config/.env"),                             # Ruta del volumen montado
+    Path("./backend/config/.env"),                        # Ruta desde la raíz del proyecto
+]
+
+# Intentar cargar de cada ubicación
+for env_path in env_paths:
+    if env_path.exists():
+        print(f"Cargando variables de entorno desde: {env_path}")
+        load_dotenv(dotenv_path=env_path)
+        break
+else:
+    print("⚠️ No se encontró archivo .env en ninguna ubicación conocida")
+
+# Si las variables no están en el entorno, intentar cargarlas explícitamente del archivo
+if not os.getenv("OPENAI_API_KEY") and Path("/app/.env").exists():
+    try:
+        with open("/app/.env", "r") as f:
+            for line in f:
+                if line.strip() and not line.startswith("#"):
+                    key, value = line.strip().split("=", 1)
+                    os.environ[key] = value
+        print("Variables cargadas manualmente del archivo .env")
+    except Exception as e:
+        print(f"Error al cargar variables manualmente: {e}")
 
 # Consola para logs
 console = Console()

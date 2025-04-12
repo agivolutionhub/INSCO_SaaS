@@ -7,8 +7,19 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from pptx import Presentation
 
-# Cargar variables de entorno
-load_dotenv(Path(__file__).parent.parent / "config" / ".env")
+# Cargar variables de entorno desde múltiples ubicaciones posibles
+env_paths = [
+    Path(__file__).parent.parent / "config" / ".env",  # Ruta original
+    Path("/app/.env"),                                 # Ruta alternativa en el contenedor
+    Path("/app/config/.env"),                          # Ruta del volumen montado
+]
+
+# Intentar cargar de cada ubicación
+for env_path in env_paths:
+    if env_path.exists():
+        print(f"[translation_service] Cargando variables desde: {env_path}")
+        load_dotenv(env_path)
+        break
 
 # Constantes
 CACHE_FILE = Path(__file__).parent.parent / "config" / "cache" / "translations.json"

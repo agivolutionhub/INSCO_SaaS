@@ -9,8 +9,19 @@ from typing import Dict, Any, Optional
 from openai import OpenAI
 from dotenv import load_dotenv
 
-# Cargar variables de entorno
-load_dotenv(Path(__file__).parent.parent / "config" / ".env")
+# Cargar variables de entorno desde múltiples ubicaciones posibles
+env_paths = [
+    Path(__file__).parent.parent / "config" / ".env",  # Ruta original
+    Path("/app/.env"),                                 # Ruta alternativa en el contenedor
+    Path("/app/config/.env"),                          # Ruta del volumen montado
+]
+
+# Intentar cargar de cada ubicación
+for env_path in env_paths:
+    if env_path.exists():
+        print(f"[video_translate_service] Cargando variables desde: {env_path}")
+        load_dotenv(env_path)
+        break
 
 # Configuración de logging
 logger = logging.getLogger("video_translate_service")
