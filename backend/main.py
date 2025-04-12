@@ -141,6 +141,7 @@ console.print(f"OpenAI Assistant ID configurado: {bool(os.getenv('OPENAI_ASSISTA
 # Montar directorios estáticos
 app.mount("/tmp", StaticFiles(directory=BASE_DIR / "tmp"), name="temp")
 app.mount("/storage", StaticFiles(directory=BASE_DIR / "storage"), name="storage")
+app.mount("/", StaticFiles(directory=Path("/app/static"), html=True), name="frontend")
 
 # Incluir routers
 app.include_router(translate_pptx_router)

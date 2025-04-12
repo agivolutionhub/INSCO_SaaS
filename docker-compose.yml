@@ -29,21 +29,12 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  # Nginx para servir el frontend y hacer de proxy para el backend
-  nginx:
-    image: nginx:alpine
-    container_name: insco-nginx
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d
-      - ./nginx/ssl:/etc/nginx/ssl
-      - ./nginx/www:/var/www/html
-    depends_on:
-      - insco-app
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.insco-app.rule=Host(`insco.agivolution.com`)"
+      - "traefik.http.routers.insco-app.entrypoints=web,websecure"
+      - "traefik.http.routers.insco-app.tls=true"
+      - "traefik.http.services.insco-app.loadbalancer.server.port=8088"
 
 volumes:
   mongodb_data: 
