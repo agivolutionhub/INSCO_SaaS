@@ -1,0 +1,5 @@
+{
+  "api_key": "tu-api-key-aqui",
+  "model": "gpt-3.5-turbo",
+  "default_language": "en"
+}
