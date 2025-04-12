@@ -143,3 +143,6 @@ npm-debug.log
 yarn-debug.log
 yarn-error.log backend/venv/
 frontend/node_modules/
+
+# Carpetas específicas del proyecto
+backend_OLD/
