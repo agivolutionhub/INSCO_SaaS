@@ -17,7 +17,7 @@ ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build || (echo "Ignorando errores de TypeScript" && vite build)
 
 # Usar una imagen base de Python para el backend
-FROM python:3.12-bookworm
+FROM ubuntu:22.04
 
 # Configuraciones iniciales para evitar interactividad durante la instalación
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -26,6 +26,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # Instalar dependencias del sistema necesarias
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
     libreoffice \
     libreoffice-script-provider-python \
     python3-uno \
@@ -64,7 +66,7 @@ WORKDIR /app
 COPY backend/requirements.txt .
 
 # Instalar dependencias de Python
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copiar el código del backend
 COPY backend/ ./backend/
@@ -82,4 +84,4 @@ EXPOSE 8088
 ENV ENVIRONMENT=production
 
 # Comando para iniciar el backend
-CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8088", "--log-level", "debug"] 
+CMD ["python3", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8088", "--log-level", "debug"] 
