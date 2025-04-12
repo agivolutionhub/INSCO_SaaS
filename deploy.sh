@@ -11,7 +11,7 @@ NC='\033[0m' # No Color
 echo -e "${GREEN}=== Iniciando despliegue del proyecto INSCO ===${NC}"
 
 # Verificar si Docker y Docker Compose están instalados
-if ! command -v docker &> /dev/null || ! command -v docker-compose &> /dev/null; then
+if ! command -v docker &> /dev/null || ! docker compose version &> /dev/null; then
     echo -e "${RED}Error: Docker y Docker Compose son necesarios para el despliegue.${NC}"
     echo -e "Instala Docker con:"
     echo -e "  curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh"
@@ -39,11 +39,11 @@ mkdir -p storage data config
 
 # Limpiar contenedores existentes
 echo -e "${GREEN}Deteniendo contenedores existentes...${NC}"
-docker-compose down
+docker compose down
 
 # Construir y desplegar los contenedores
 echo -e "${GREEN}Construyendo y desplegando contenedores...${NC}"
-docker-compose up --build -d
+docker compose up --build -d
 
 # Esperar a que los contenedores estén funcionando
 echo -e "${GREEN}Esperando a que los contenedores estén listos...${NC}"
@@ -54,7 +54,7 @@ if [ "$(docker ps -q -f name=insco-app)" ]; then
     echo -e "${GREEN}¡Despliegue completado con éxito!${NC}"
     
     # Verificar si OpenAI está configurado
-    OPENAI_CONFIGURED=$(docker exec insco-app bash -c "grep -q api_key /app/config/auth_credentials.json && echo 'true' || echo 'false'")
+    OPENAI_CONFIGURED=$(docker exec insco-app grep "api_key" /app/config/auth_credentials.json > /dev/null 2>&1 && echo "true" || echo "false")
     if [ "$OPENAI_CONFIGURED" = "true" ]; then
         echo -e "${GREEN}✅ API de OpenAI configurada correctamente${NC}"
     else
@@ -62,9 +62,8 @@ if [ "$(docker ps -q -f name=insco-app)" ]; then
     fi
     
     echo -e "${GREEN}La aplicación está disponible en:${NC}"
-    echo -e "  http://localhost:8088 (acceso directo)"
-    echo -e "  URL de EasyPanel (consulta tu panel de control)"
-    
+    echo -e "  URL generada por Easypanel (consulta tu panel de control, por ejemplo: https://scripts-tools.ppwqpd.easypanel.host/)"
+
     # Verificar estado de salud del backend
     echo -e "\n${GREEN}Verificando estado de salud del backend...${NC}"
     sleep 5
@@ -73,5 +72,5 @@ if [ "$(docker ps -q -f name=insco-app)" ]; then
         echo -e "${RED}❌ Backend no responde correctamente${NC}"
 else
     echo -e "${RED}Error: El contenedor no se inició correctamente.${NC}"
-    echo -e "Comprueba los logs con: docker-compose logs"
+    echo -e "Comprueba los logs con: docker compose logs"
 fi 

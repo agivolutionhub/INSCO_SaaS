@@ -44,4 +44,8 @@ echo -e "1. Que los archivos estáticos estén correctamente ubicados en /app/st
 echo -e "2. Que el backend esté sirviendo la ruta '/' correctamente (app.mount('/') en main.py)"
 echo -e "3. Que las etiquetas de Traefik estén configuradas correctamente en docker-compose.yml"
 echo -e "4. Que no haya problemas de CORS o certificados SSL en el navegador"
-echo -e "5. Que el puerto 8088 esté accesible y las reglas de firewall lo permitan" 
+echo -e "5. Que el puerto 8088 esté accesible y las reglas de firewall lo permitan"
+
+# Ejecutar comando de diagnóstico simplificado
+echo -e "\n${GREEN}Diagnóstico rápido con docker compose:${NC}"
+docker compose ps 
