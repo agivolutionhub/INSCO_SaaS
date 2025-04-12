@@ -4,9 +4,19 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from pathlib import Path
 import time
+import sys
 from rich.console import Console
 
-# Consola para logs
+# Añadir el directorio actual al path de Python
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+# Importar utilidades propias
+from scripts.utils import setup_logger, ensure_dir
+
+# Configurar logger
+logger = setup_logger("main")
+
+# Consola para logs enriquecidos
 console = Console()
 
 # Crear una instancia de FastAPI
@@ -24,15 +34,15 @@ app.add_middleware(
 # Obtener directorio base
 BASE_DIR = Path(__file__).resolve().parent
 
-# Directorios de almacenamiento básicos
-TMP_DIR = BASE_DIR / "tmp"
-STORAGE_DIR = BASE_DIR / "storage"
+# Directorios de almacenamiento
+TMP_DIR = ensure_dir(BASE_DIR / "tmp")
+STORAGE_DIR = ensure_dir(BASE_DIR / "storage")
+CONFIG_DIR = ensure_dir(BASE_DIR / "config")
 
-# Crear directorios
-TMP_DIR.mkdir(parents=True, exist_ok=True)
-STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-console.print(f"Directorio temporal: {TMP_DIR}")
-console.print(f"Directorio de almacenamiento: {STORAGE_DIR}")
+# Log de directorios creados
+console.print(f"[green]Directorio temporal:[/green] {TMP_DIR}")
+console.print(f"[green]Directorio de almacenamiento:[/green] {STORAGE_DIR}")
+console.print(f"[green]Directorio de configuración:[/green] {CONFIG_DIR}")
 
 # Montar directorios estáticos
 app.mount("/tmp", StaticFiles(directory=TMP_DIR), name="temp")
@@ -48,7 +58,8 @@ async def health_check():
     health_status = {
         "status": "healthy",
         "time": time.time(),
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "environment": "development"
     }
     
     # Verificar que los directorios críticos sean accesibles
@@ -65,6 +76,7 @@ async def health_check():
             f.write("test")
         tmp_test.unlink()  # Eliminar archivo de prueba
     except Exception as e:
+        logger.error(f"Error en health check: {str(e)}")
         health_status["status"] = "unhealthy"
         health_status["error"] = str(e)
         return JSONResponse(status_code=500, content=health_status)
@@ -72,7 +84,7 @@ async def health_check():
     return health_status
 
 # Mostrar información de inicio
-console.print("[bold green]API INSCO mínima iniciada correctamente[/bold green]")
-console.print(f"[green]Endpoints disponibles:[/green]")
-console.print(f"  • [bold]/api/root[/bold] - Endpoint principal")
-console.print(f"  • [bold]/health[/bold] - Verificación de salud") 
+console.print("[bold green]API INSCO iniciada correctamente[/bold green]")
+console.print("[green]Endpoints disponibles:[/green]")
+console.print("  • [bold]/api/root[/bold] - Endpoint principal")
+console.print("  • [bold]/health[/bold] - Verificación de salud") 
