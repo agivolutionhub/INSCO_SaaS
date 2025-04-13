@@ -7,32 +7,30 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}Verificando dependencias básicas para INSCO...${NC}"
+echo -e "${GREEN}Verificando dependencias del sistema para INSCO...${NC}"
 
-# Verificar Python
-if command -v python3 &> /dev/null; then
-  PYTHON_VERSION=$(python3 --version)
-  echo -e "${GREEN}✅ Python instalado: $PYTHON_VERSION${NC}"
+# Verificar FFmpeg
+if command -v ffmpeg &> /dev/null; then
+  FFMPEG_VERSION=$(ffmpeg -version | head -n 1)
+  echo -e "${GREEN}✅ FFmpeg instalado: $FFMPEG_VERSION${NC}"
+  
+  # Verificar codecs importantes
+  CODECS=$(ffmpeg -codecs)
+  echo "$CODECS" | grep -q "libx264" && echo -e "${GREEN}  ✅ Codec H.264 disponible${NC}" || echo -e "${YELLOW}  ⚠️ Codec H.264 no disponible${NC}"
+  echo "$CODECS" | grep -q "libx265" && echo -e "${GREEN}  ✅ Codec H.265 disponible${NC}" || echo -e "${YELLOW}  ⚠️ Codec H.265 no disponible${NC}"
+  echo "$CODECS" | grep -q "aac" && echo -e "${GREEN}  ✅ Codec AAC disponible${NC}" || echo -e "${YELLOW}  ⚠️ Codec AAC no disponible${NC}"
 else
-  echo -e "${RED}❌ ERROR: Python 3 no está disponible${NC}"
+  echo -e "${RED}❌ ERROR: FFmpeg no está disponible${NC}"
   exit 1
 fi
 
-# Verificar pip
-if command -v pip3 &> /dev/null || command -v pip &> /dev/null; then
-  PIP_VERSION=$(pip --version 2>/dev/null || pip3 --version)
-  echo -e "${GREEN}✅ pip instalado: $PIP_VERSION${NC}"
+# Verificar poppler-utils
+if command -v pdftoppm &> /dev/null; then
+  PDFTOPPM_VERSION=$(pdftoppm -v 2>&1 | head -n 1)
+  echo -e "${GREEN}✅ poppler-utils instalado: $PDFTOPPM_VERSION${NC}"
 else
-  echo -e "${RED}❌ ERROR: pip no está disponible${NC}"
+  echo -e "${RED}❌ ERROR: poppler-utils no está disponible${NC}"
   exit 1
 fi
 
-# Verificar curl (para healthchecks)
-if command -v curl &> /dev/null; then
-  CURL_VERSION=$(curl --version | head -n 1)
-  echo -e "${GREEN}✅ curl instalado: $CURL_VERSION${NC}"
-else
-  echo -e "${YELLOW}⚠️ ADVERTENCIA: curl no está disponible (podría ser necesario para healthchecks)${NC}"
-fi
-
-echo -e "${GREEN}Verificación completada. El sistema está listo para ejecutar la versión básica de INSCO.${NC}" 
+echo -e "${GREEN}Verificación completada. El sistema está listo para ejecutar INSCO.${NC}" 

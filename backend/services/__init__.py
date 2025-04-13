@@ -1,1 +1,2 @@
-# Módulo de servicios para la API de INSCO 
+# Paquete de servicios para la lógica de negocio
+# Contiene servicios independientes de la API 

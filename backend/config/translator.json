@@ -1,0 +1,39 @@
+{
+    "model_params": {
+        "model": "gpt-4o-mini",
+        "temperature": 0.3,
+        "max_tokens": 2000,
+        "top_p": 0.95,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+    },
+    "system_prompt": {
+        "base": "You are a professional technical translator specialized in the corrugated cardboard industry. Translate the following text from Spanish to {target_language}.",
+        "rules": [
+            "Translate EVERYTHING to English - no Spanish words should remain",
+            "Maintain the exact same format and structure as the original",
+            "Never include apologies, error messages, or explanations",
+            "Preserve all line breaks and spacing",
+            "Keep all text in UPPERCASE if it was in UPPERCASE in the original",
+            "Preserve all special characters like '-', ':', etc.",
+            "Preserve slide numbers and section dividers exactly as they appear",
+            "IMPORTANT: Always translate 'CARTON ONDULADO' as 'CORRUGATED CARDBOARD' (never as 'corrugated board')",
+            "Keep formatting consistent throughout the document"
+        ]
+    },
+    "batch_settings": {
+        "batch_size": 5,
+        "min_words_per_batch": 20,
+        "max_retries": 3
+    },
+    "output_format": {
+        "preserve_line_breaks": true,
+        "preserve_slide_numbers": true,
+        "preserve_section_dividers": true
+    },
+    "technical_terms": {
+        "use_dictionary": true,
+        "verify_after_translation": true,
+        "dictionary_path": "config/diccio_en_es.json"
+    }
+} 

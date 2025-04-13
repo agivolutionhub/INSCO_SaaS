@@ -1,0 +1,146 @@
+{
+    "stt": {
+        "api_key": "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"
+    },
+    "sdk": {
+        "import": "from openai import OpenAI",
+        "client": "client = OpenAI()",
+        "method": "client.audio.transcriptions.create",
+        "required_params": {
+            "model": "gpt-4o-transcribe",      
+            "file": "path/to/audio.mp3"
+        },
+        "optional_params": {
+            "language": null,
+            "prompt": null,
+            "response_format": "json",
+            "temperature": 0
+        },
+        "response": {
+            "text": "response.text",
+            "segments": "response.segments",
+            "language": "response.language"
+        }
+    },
+    "documentation": {
+        "models": {
+            "whisper-1": {
+                "description": "Modelo oficial de OpenAI para transcripción de audio",
+                "input_cost": "$0.006 per minute",
+                "pricing": {
+                    "transcription": {
+                        "cost_per_minute": 0.006,
+                        "examples": {
+                            "30_seconds": 0.003,
+                            "1_minute": 0.006,
+                            "5_minutes": 0.030,
+                            "1_hour": 0.360,
+                            "100_hours": 36.00
+                        }
+                    }
+                },
+                "limits": {
+                    "max_file_size": "25 MB",
+                    "supported_formats": ["mp3", "mp4", "mpeg", "mpga", "m4a", "wav", "webm"],
+                    "max_duration": "1 hora"
+                }
+            },
+            "gpt-4o-transcribe": {
+                "description": "Modelo de alta precisión para transcripción y traducción de audio",
+                "input_cost": "$6.00 per 1M tokens",
+                "pricing": {
+                    "transcription": {
+                        "cost_per_minute": 0.006,
+                        "examples": {
+                            "30_seconds": 0.003,
+                            "1_minute": 0.006,
+                            "5_minutes": 0.030,
+                            "1_hour": 0.360,
+                            "100_hours": 36.00
+                        }
+                    }
+                },
+                "limits": {
+                    "max_file_size": "25 MB",
+                    "supported_formats": ["mp3", "mp4", "mpeg", "mpga", "m4a", "wav", "webm"],
+                    "max_duration": "1 hora"
+                }
+            },
+            "gpt-4o-mini-transcribe": {
+                "description": "Modelo optimizado para velocidad y costo reducido",
+                "input_cost": "$3.00 per 1M tokens",
+                "pricing": {
+                    "transcription": {
+                        "cost_per_minute": 0.003,
+                        "examples": {
+                            "30_seconds": 0.0015,
+                            "1_minute": 0.003,
+                            "5_minutes": 0.015,
+                            "1_hour": 0.180,
+                            "100_hours": 18.00
+                        }
+                    }
+                },
+                "limits": {
+                    "max_file_size": "25 MB",
+                    "supported_formats": ["mp3", "mp4", "mpeg", "mpga", "m4a", "wav", "webm"],
+                    "max_duration": "1 hora"
+                }
+            }
+        },
+        "versions": ["1.0"],
+        "updated": "March 2024",
+        "capabilities": [
+            "speech_to_text",
+            "multilingual",
+            "language_detection",
+            "word_level_timestamps",
+            "text_segments",
+            "speaker_labels",
+            "punctuation",
+            "number_formatting",
+            "profanity_filtering"
+        ],
+        "response_formats": [
+            "json",
+            "text",
+            "srt",
+            "verbose_json",
+            "vtt"
+        ],
+        "supported_languages": "Afrikáans, Árabe, Armenio, Azerbaiyano, Bielorruso, Bosnio, Búlgaro, Catalán, Chino, Croata, Checo, Danés, Holandés, Inglés, Estonio, Finlandés, Francés, Gallego, Alemán, Griego, Hebreo, Hindi, Húngaro, Islandés, Indonesio, Italiano, Japonés, Kannada, Kazajo, Coreano, Letón, Lituano, Macedonio, Malayo, Marathi, Maorí, Nepalí, Noruego, Persa, Polaco, Portugués, Rumano, Ruso, Serbio, Eslovaco, Esloveno, Español, Swahili, Sueco, Tagalo, Tamil, Tailandés, Turco, Ucraniano, Urdu, Vietnamita, Galés"
+    },
+    "examples": {
+        "basic_transcription": {
+            "description": "Transcripción básica de un archivo de audio",
+            "code": [
+                "from openai import OpenAI",
+                "client = OpenAI()",
+                "audio_file = open('speech.mp3', 'rb')",
+                "transcript = client.audio.transcriptions.create(",
+                "    model='whisper-1',",
+                "    file=audio_file,",
+                "    response_format='text'",
+                ")",
+                "print(transcript)"
+            ]
+        },
+        "transcription_with_options": {
+            "description": "Transcripción con opciones adicionales",
+            "code": [
+                "from openai import OpenAI",
+                "client = OpenAI()",
+                "audio_file = open('speech.mp3', 'rb')",
+                "transcript = client.audio.transcriptions.create(",
+                "    model='whisper-1',",
+                "    file=audio_file,",
+                "    language='es',",
+                "    prompt='Transcripción de una reunión sobre desarrollo de software',",
+                "    response_format='json',",
+                "    temperature=0",
+                ")",
+                "print(transcript.text)"
+            ]
+        }
+    }
+}
