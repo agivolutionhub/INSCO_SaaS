@@ -14,6 +14,7 @@ sys.path.insert(0, str(BASE_DIR))
 # Importar los routers
 from scripts.diapos_autofit import get_autofit_router
 from scripts.diapos_split import get_router as get_split_router
+from scripts.diapos_translate import router as translate_router
 
 # Crear una instancia de FastAPI
 app = FastAPI(
@@ -41,6 +42,10 @@ for directory in [STORAGE_DIR, TMP_DIR]:
     directory.mkdir(parents=True, exist_ok=True)
     print(f"Directorio creado: {directory}")
 
+# Establecer variables de entorno para los scripts
+os.environ["STORAGE_DIR"] = str(STORAGE_DIR)
+os.environ["CACHE_DIR"] = str(BASE_DIR / "config" / "cache")
+
 # Montar directorios estáticos para archivos procesados
 app.mount("/tmp", StaticFiles(directory=TMP_DIR), name="temp")
 app.mount("/storage", StaticFiles(directory=STORAGE_DIR), name="storage")
@@ -51,6 +56,7 @@ app.mount("/storage", StaticFiles(directory=STORAGE_DIR), name="storage")
 # Incluir routers
 app.include_router(get_autofit_router())
 app.include_router(get_split_router())
+app.include_router(translate_router)
 
 @app.get("/root")
 async def root():
