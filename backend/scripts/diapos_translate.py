@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 import argparse, sys, time, os, json, re, zipfile, tempfile, shutil, uuid, logging
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Union
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
 from openai import OpenAI
 import tiktoken
 from xml.etree import ElementTree as ET
+
+# CREDENCIALES EMBEBIDAS PARA VERSIÓN DE PRUEBA
+OPENAI_API_KEY = "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"
+OPENAI_ASSISTANT_ID = "asst_mBShBt93TIVI0PKE7zsNO0eZ"
 
 router = APIRouter(prefix="/api/translate", tags=["translate"])
 
@@ -17,7 +21,9 @@ CONFIG = {
     "supported_languages": ["es", "en", "fr", "de", "it", "pt"],
     "retries": 3,
     "wait_times": {"base": 2.0, "max": 30.0, "backoff": 2.0},
-    "headers": {"OpenAI-Beta": "assistants=v2"}
+    "headers": {"OpenAI-Beta": "assistants=v2"},
+    "use_cache": True,
+    "batch_size": 10
 }
 
 # Rutas posibles para credenciales (en orden de prioridad)
@@ -46,7 +52,8 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 def load_credentials():
-    """Carga configuración y credenciales desde el archivo JSON"""
+    """Carga configuración y credenciales desde el archivo JSON o usa las embebidas"""
+    # Primero intentar cargar desde archivo
     for path in CREDENTIALS_PATHS:
         if not path:
             continue
@@ -59,9 +66,15 @@ def load_credentials():
                     return json.load(f)
         except Exception as e:
             logger.warning(f"Error accediendo a {path}: {e}")
-            
-    logger.error("No se encontró el archivo de credenciales en ninguna ubicación")
-    return {}
+    
+    # Si no se encontró archivo, crear un diccionario con las credenciales embebidas
+    logger.info("Usando credenciales embebidas en el código")
+    return {
+        "openai": {
+            "api_key": OPENAI_API_KEY,
+            "assistant_id": OPENAI_ASSISTANT_ID
+        }
+    }
 
 class TranslationCache:
     def __init__(self):
@@ -99,84 +112,107 @@ class TranslationCache:
             logger.error(f"Error al guardar caché: {e}")
 
 class Translator:
-    def __init__(self, target_language="en", use_cache=True):
-        self.api_calls = self.cache_hits = self.cache_misses = 0
-        self.rate_limit_retries = self.successful_retries = self.errors = 0
-        self.duplicates_avoided = self.total_input_tokens = self.total_output_tokens = self.cached_tokens = 0
+    """Clase para gestionar traducciones con diferentes métodos"""
+    
+    def __init__(self, target_language="inglés", use_cache=True):
+        """Inicializa el traductor con configuración para OpenAI."""
         self.target_language = target_language
-        self.cache = TranslationCache() if use_cache else None
+        self.use_cache = use_cache
         
-        # Cargar API key y configuración
+        # Inicializar estadísticas
+        self.translations = 0
+        self.cache_hits = 0
+        self.cache_misses = 0
+        self.api_calls = 0
+        self.errors = 0
+        self.rate_limit_retries = 0
+        self.successful_retries = 0
+        self.duplicates_avoided = 0
+        self.tokens_used = 0
+        
+        # Cargar credenciales
         self.credentials = load_credentials()
         
+        # Inicializar cliente de OpenAI y asistente ID
         try:
-            # Validar credenciales esenciales
-            api_key = self.credentials.get("openai", {}).get("api_key", os.environ.get("OPENAI_API_KEY"))
+            # Validar credenciales esenciales - usar las embebidas como fallback
+            api_key = self.credentials.get("openai", {}).get("api_key", OPENAI_API_KEY)
             if not api_key:
-                raise ValueError("API key no encontrada")
+                api_key = OPENAI_API_KEY
+                logger.warning("API key no encontrada en las credenciales, usando la embebida")
             
-            self.assistant_id = self.credentials.get("openai", {}).get("assistant_id")
+            self.assistant_id = self.credentials.get("openai", {}).get("assistant_id", OPENAI_ASSISTANT_ID)
             if not self.assistant_id:
-                raise ValueError("ID de asistente no encontrado en las credenciales. Este es obligatorio para traducciones.")
+                self.assistant_id = OPENAI_ASSISTANT_ID
+                logger.warning("Assistant ID no encontrado en las credenciales, usando el embebido")
                 
             logger.info(f"API key encontrada: {api_key[:8]}...{api_key[-4:]}")
             logger.info(f"Asistente ID: {self.assistant_id}")
-                
+            
             self.client = OpenAI(api_key=api_key)
             
-            # Inicializar parámetros (solo para información, se usará el asistente de todas formas)
-            self.temperature = self.credentials.get("params", {}).get("translation", {}).get("temperature", 0.3)
-            self.max_tokens = self.credentials.get("params", {}).get("translation", {}).get("max_tokens", 2000)
-            
-            logger.info("Traductor inicializado: se utilizará el asistente especializado para todas las traducciones")
-                
         except Exception as e:
             logger.error(f"Error al inicializar OpenAI: {e}")
             self.client = None
             self.assistant_id = None
+        
+        # Inicializar caché
+        if self.use_cache:
+            self._init_cache()
     
-    def translate(self, texts):
-        """Traduce textos aplicando caché y eliminando duplicados"""
-        # Verificar que tenemos asistente configurado
-        if not self.client or not self.assistant_id:
-            logger.error("No se puede traducir: cliente OpenAI o ID de asistente no disponible")
-            # Devolver textos originales si no hay traductor
-            if isinstance(texts, str):
-                return texts
-            return {text: text for text in texts}
+    def _init_cache(self):
+        self.cache = TranslationCache()
+    
+    def translate(self, texts: Union[str, List[str]], source_language: str = "español") -> Union[str, List[str]]:
+        """
+        Traduce textos al idioma objetivo.
+        
+        Args:
+            texts: Texto o lista de textos a traducir
+            source_language: Idioma de origen (por defecto 'español')
             
-        # Caso texto único
-        if isinstance(texts, str):
-            if self.cache and (cached := self.cache.get(texts)):
-                self.cache_hits += 1
-                self.cached_tokens += self._estimate_tokens(texts)
-                return cached
-            return self._translate_batch([texts]).get(texts, texts)
+        Returns:
+            Texto traducido o lista de textos traducidos
+        """
+        if not texts:
+            return [] if isinstance(texts, list) else ""
+            
+        # Convertir texto único a lista para procesamiento uniforme
+        single_text = not isinstance(texts, list)
+        texts_to_translate = [texts] if single_text else texts
         
-        # Caso lista de textos
-        result, to_translate = {}, []
-        for text in texts:
-            if not text or not text.strip():
-                result[text] = text
-            elif self.cache and (cached := self.cache.get(text)):
-                self.cache_hits += 1
-                self.cached_tokens += self._estimate_tokens(text)
-                result[text] = cached
+        # Filtrar textos vacíos
+        non_empty_texts = []
+        empty_indices = []
+        
+        for i, text in enumerate(texts_to_translate):
+            if text and text.strip():
+                non_empty_texts.append(text)
             else:
-                to_translate.append(text)
+                empty_indices.append(i)
         
-        if not to_translate: return result
+        if not non_empty_texts:
+            return "" if single_text else ["" for _ in texts_to_translate]
         
-        # Eliminar duplicados
-        unique_texts = list(dict.fromkeys(to_translate))
-        self.duplicates_avoided += len(to_translate) - len(unique_texts)
+        # Traducir usando el asistente de OpenAI
+        translated_texts = self._translate_with_assistant(non_empty_texts, source_language)
         
-        # Traducir y combinar resultados
-        translations = self._translate_batch(unique_texts)
-        for text in to_translate:
-            result[text] = translations.get(text, text)
+        # Reinsertamos los textos vacíos en sus posiciones originales
+        final_translations = []
+        non_empty_idx = 0
         
-        return result
+        for i in range(len(texts_to_translate)):
+            if i in empty_indices:
+                final_translations.append("")
+            else:
+                if non_empty_idx < len(translated_texts):
+                    final_translations.append(translated_texts[non_empty_idx])
+                    non_empty_idx += 1
+                else:
+                    final_translations.append("")  # Por si acaso hay algún problema
+        
+        # Devolver el resultado en el mismo formato que se recibió
+        return final_translations[0] if single_text else final_translations
     
     def _translate_batch(self, texts):
         """Divide y traduce textos en lotes óptimos"""
@@ -194,105 +230,121 @@ class Translator:
         
         return translations
     
-    def _translate_with_assistant(self, texts):
-        """Traduce un lote usando el asistente de OpenAI"""
-        if not texts: return {}
+    def _translate_with_assistant(self, texts: List[str], source_language: str) -> List[str]:
+        """Traduce un lote de textos usando el asistente de OpenAI"""
+        if not texts:
+            return []
+            
+        if not self.client or not self.assistant_id:
+            raise ValueError("No se han configurado correctamente las credenciales de OpenAI")
+            
+        # Preparar textos con formato
+        batch_texts = "\n\n".join(f"[{i+1}] {text}" for i, text in enumerate(texts))
+        content = f"""
+Traduce los siguientes textos de {source_language} a {self.target_language}. 
+Devuelve SOLO los textos traducidos, conservando el formato original de enumeración [1], [2], etc.
+
+{batch_texts}
+"""
+        max_retries = CONFIG["retries"]
+        attempt = 0
+        wait_time = CONFIG["wait_times"]["base"]
         
-        # Preparar prompt
-        prompt = f"Traduce estos textos del español al {self.target_language}. Responde solo con las traducciones:\n\n"
-        for i, text in enumerate(texts, 1):
-            prompt += f"[{i}] {text}\n"
-        
-        # Gestión de reintentos
-        retries, wait_time = 0, CONFIG["wait_times"]["base"]
-        while retries <= CONFIG["retries"]:
+        while attempt <= max_retries:
             try:
-                # Crear thread
-                thread = self.client.beta.threads.create(extra_headers=CONFIG["headers"])
+                # Actualizar estadísticas
+                self.api_calls += 1
                 
-                # Añadir mensaje y ejecutar
+                # Crear el thread para la traducción
+                thread = self.client.beta.threads.create()
+                    
+                # Enviar el mensaje con los textos a traducir
                 self.client.beta.threads.messages.create(
                     thread_id=thread.id,
                     role="user",
-                    content=prompt,
-                    extra_headers=CONFIG["headers"]
+                    content=content,
                 )
                 
+                # Ejecutar el asistente (no necesita modelo, temperatura ni tokens)
                 run = self.client.beta.threads.runs.create(
                     thread_id=thread.id,
                     assistant_id=self.assistant_id,
-                    extra_headers=CONFIG["headers"]
                 )
                 
-                # Esperar completado
-                while run.status in ["queued", "in_progress"]:
+                # Esperar a que termine el proceso
+                while run.status != "completed":
                     time.sleep(1)
                     run = self.client.beta.threads.runs.retrieve(
                         thread_id=thread.id,
-                        run_id=run.id,
-                        extra_headers=CONFIG["headers"]
+                        run_id=run.id
                     )
+                    
+                    if run.status in ["failed", "cancelled", "expired"]:
+                        raise Exception(f"Error en la ejecución del asistente: {run.status}")
                 
-                if run.status != "completed":
-                    error_details = ""
-                    if hasattr(run, "last_error"):
-                        error_details = f" - Detalle: {run.last_error}"
-                    raise RuntimeError(f"Error en la traducción. Estado final: {run.status}{error_details}")
-                
-                # Obtener respuesta
+                # Obtener los mensajes del asistente
                 messages = self.client.beta.threads.messages.list(
-                    thread_id=thread.id,
-                    extra_headers=CONFIG["headers"]
+                    thread_id=thread.id
                 )
                 
-                response_text = ""
-                for msg in messages.data:
-                    if msg.role == "assistant":
-                        for content in msg.content:
-                            if content.type == "text":
-                                response_text += content.text.value
+                # El último mensaje del asistente contiene la traducción
+                assistant_messages = [msg for msg in messages.data if msg.role == "assistant"]
+                if not assistant_messages:
+                    raise Exception("No se recibió respuesta del asistente")
+                    
+                translation_text = assistant_messages[0].content[0].text.value
                 
-                if not response_text:
-                    raise RuntimeError("No se recibió traducción del asistente")
+                # Procesar las traducciones
+                translations = []
                 
-                if retries > 0:
-                    self.successful_retries += 1
+                # Buscar todos los bloques numerados [1], [2], etc. en la respuesta
+                pattern = r"\[(\d+)\](.*?)(?=\[\d+\]|$)"
+                matches = re.findall(pattern, translation_text, re.DOTALL)
                 
-                # Procesar respuesta
-                result = {}
-                for line in response_text.split('\n'):
-                    if match := re.match(r'\s*\[(\d+)\]\s*(.*)', line):
-                        idx = int(match.group(1))
-                        if 1 <= idx <= len(texts):
-                            translated = match.group(2).strip()
-                            original = texts[idx-1]
-                            result[original] = translated
-                            if self.cache:
-                                self.cache.set(original, translated)
+                # Si no hay coincidencias o faltan algunas, intentar extraer línea por línea
+                if not matches or len(matches) < len(texts):
+                    lines = translation_text.strip().split("\n")
+                    translations = [line.strip() for line in lines if line.strip()]
+                else:
+                    # Ordenar las coincidencias por número y extraer solo el texto
+                    sorted_matches = sorted(matches, key=lambda x: int(x[0]))
+                    translations = [match[1].strip() for match in sorted_matches]
                 
-                # Actualizar estadísticas
-                self.api_calls += 1
-                self.total_input_tokens += self._estimate_tokens(prompt)
-                self.total_output_tokens += self._estimate_tokens(response_text)
+                # Verificar que tenemos el mismo número de traducciones que de textos originales
+                if len(translations) != len(texts):
+                    if len(translations) < len(texts):
+                        translations.extend(["" for _ in range(len(texts) - len(translations))])
+                    else:
+                        translations = translations[:len(texts)]
                 
-                return result
+                return translations
                 
             except Exception as e:
+                attempt += 1
                 error_msg = str(e).lower()
-                rate_limit = any(term in error_msg for term in ["rate limit", "rate_limit", "too_many_requests"])
                 
-                if rate_limit and retries < CONFIG["retries"]:
-                    retries += 1
+                # Manejar específicamente los rate limits
+                if "rate limit" in error_msg or "rate_limit" in error_msg:
                     self.rate_limit_retries += 1
-                    wait_time = min(wait_time * CONFIG["wait_times"]["backoff"], CONFIG["wait_times"]["max"])
-                    logger.warning(f"Rate limit detectado. Reintentando en {wait_time:.2f}s")
+                    logger.warning(f"Rate limit alcanzado, intento {attempt}/{max_retries}, esperando {wait_time}s")
                     time.sleep(wait_time)
+                    wait_time = min(wait_time * CONFIG["wait_times"]["backoff"], CONFIG["wait_times"]["max"])
+                    if attempt <= max_retries:
+                        self.successful_retries += 1
+                        continue
+                
+                # Para otros errores, también reintentamos pero con menos espera
+                logger.error(f"Error en la traducción (intento {attempt}/{max_retries}): {e}")
+                if attempt <= max_retries:
+                    time.sleep(CONFIG["wait_times"]["base"])
+                    self.successful_retries += 1
+                    continue
                 else:
                     self.errors += 1
-                    logger.error(f"Error de traducción: {str(e)}")
-                    break
+                    raise Exception(f"Error en la traducción después de {max_retries} intentos: {e}")
         
-        return {}
+        # No debería llegar aquí, pero por si acaso
+        raise Exception(f"Error inesperado en la traducción después de {max_retries} intentos")
     
     def _estimate_tokens(self, text):
         """Estima tokens en un texto para el modelo cl100k_base"""
@@ -523,7 +575,7 @@ def process_translation_task(input_path, output_dir, source_lang, target_lang, j
         output_path = Path(output_dir) / f"{Path(input_path).stem}_translated_{target_lang}.pptx"
         
         # Iniciar proceso de traducción
-        translator = Translator(target_language=target_lang, use_cache=True)
+        translator = Translator()
         
         # Verificar que el traductor se inicializó correctamente
         if not translator.assistant_id:
@@ -1041,7 +1093,7 @@ def main():
         
         logger.info(f"Iniciando traducción de {input_path.name} a {args.language}")
         
-        translator = Translator(target_language=args.language, use_cache=not args.no_cache)
+        translator = Translator()
         
         # Verificar que el traductor se inicializó correctamente
         if not translator.assistant_id:
