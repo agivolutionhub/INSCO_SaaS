@@ -77,7 +77,7 @@ Cada fase será documentada con su fecha, cambios realizados y resultado.
 - **Estado**: Completo
 - **Cambios**:
   - Implementada herramienta AutoFit como script independiente consolidado
-  - Solucionado problema de conflicto entre frontend y backend
+  - **Corregido problema crítico de conflicto entre frontend y backend**
   - Eliminado montaje del frontend en la aplicación backend
   - Corregidas rutas de API para funcionar correctamente con proxy
   - Actualizada configuración CORS para permitir solicitudes desde el dominio de producción
@@ -85,9 +85,51 @@ Cada fase será documentada con su fecha, cambios realizados y resultado.
   - scripts/diapos_autofit.py
 - **Archivos modificados**:
   - main.py
+- **Problema crítico resuelto**:
+  - Se identificó que el backend estaba intentando servir el frontend desde la misma ruta raíz (`/`), lo que provocaba conflictos con las rutas API
+  - Las solicitudes OPTIONS para CORS fallaban con errores 400 Bad Request
+  - La estructura de rutas duplicada (`/api/api/...`) impedía el funcionamiento correcto
+  - La separación incompleta entre frontend y backend bloqueaba toda la implementación de herramientas
+- **Solución implementada**:
+  - Eliminación del montaje del frontend en el backend
+  - Corrección de las rutas para adaptarse al patrón de proxy (`/root` en lugar de `/api/root`)
+  - Configuración correcta de CORS con el dominio de producción
+  - Definición clara de responsabilidades: frontend en puerto 3001, backend en puerto 8088
+- **Resultado verificado en logs**:
+  - Solicitudes OPTIONS ahora reciben respuesta 200 OK
+  - Solicitudes POST funcionan correctamente
+  - Procesamiento completo de diapositivas exitoso
+  - Descarga de archivos procesados funcionando sin errores
 - **Mejoras**:
   - Separación clara de responsabilidades entre frontend (puerto 3001) y backend (puerto 8088)
   - Resolución de problemas de enrutamiento en producción
   - Implementación modular de funcionalidades como scripts independientes
-- **Resultado**: Primera herramienta (AutoFit) funcional en producción
+  - Establecimiento de un patrón para todas las futuras implementaciones
+- **Resultado**: Primera herramienta (AutoFit) completamente funcional en producción
+- **Conclusión**: Este cambio es fundamental y establece las bases para todo el desarrollo futuro del proyecto
 - **Próximos pasos**: Continuar con la migración de funcionalidades adicionales siguiendo el patrón establecido 
+
+### Fase 4: Integración de herramienta de división de presentaciones (PPTX Split)
+
+- **Fecha**: 13-04-2025
+- **Estado**: Completo
+- **Cambios**:
+  - Unificación de código de división de PPTX en un solo script independiente
+  - Consolidación de funcionalidades CLI y API en una sola herramienta
+  - Integración con el sistema principal a través del router existente
+  - Mantenimiento del patrón establecido en la fase anterior
+- **Archivos añadidos**:
+  - scripts/diapos_split.py
+- **Archivos modificados**:
+  - main.py
+- **Código migrado desde**:
+  - backend_OLD/services/pptx_service.py
+  - backend_OLD/scripts/split_pptx.py
+  - backend_OLD/routes/split_pptx.py
+- **Mejoras**:
+  - Simplificación mediante unificación de código relacionado en un solo archivo
+  - Implementación de interfaz dual (CLI/API) para facilitar pruebas y uso
+  - Mantenimiento del patrón de integración limpio con la API principal
+  - Sistema de almacenamiento de archivos consistente
+- **Resultado**: Segunda herramienta (PPTX Split) completamente funcional e integrada
+- **Próximos pasos**: Continuar con la migración de funcionalidades adicionales (herramientas de video y audio) 
