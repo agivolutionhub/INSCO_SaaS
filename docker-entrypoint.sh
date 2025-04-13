@@ -12,16 +12,8 @@ log "Iniciando INSCO SaaS en Docker..."
 export BACKEND_PORT=${BACKEND_PORT:-8088}
 export FRONTEND_PORT=${FRONTEND_PORT:-3001}
 
-# Crear rutas iniciales
-mkdir -p /app/storage/transcripts \
-    /app/storage/audio \
-    /app/storage/autofit \
-    /app/storage/translations \
-    /app/tmp/uploads \
-    /app/tmp/processed \
-    /app/tmp/captures \
-    /app/tmp/audio \
-    /app/tmp/videos
+# Crear solo los directorios necesarios para AutoFit
+mkdir -p /app/storage/autofit /app/tmp
 
 # Comprobar el archivo de credenciales
 if [ ! -f "/app/config/auth_credentials.json" ]; then

@@ -52,16 +52,9 @@ COPY backend/ ./backend/
 # Copiar frontend construido
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
-# Crear directorios necesarios para todos los servicios
-RUN mkdir -p /app/storage/transcripts \
-    /app/storage/audio \
-    /app/storage/autofit \
-    /app/storage/translations \
-    /app/tmp/uploads \
-    /app/tmp/processed \
-    /app/tmp/captures \
-    /app/tmp/audio \
-    /app/tmp/videos \
+# Crear solo los directorios necesarios para AutoFit
+RUN mkdir -p /app/storage/autofit \
+    /app/tmp \
     /app/config \
     && chmod -R 777 /app/storage /app/tmp /app/config
 
