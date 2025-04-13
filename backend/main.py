@@ -47,6 +47,7 @@ def create_app():
         "http://localhost:5174",
         "http://localhost:3001",
         "http://147.93.85.32:3001",
+        "http://147.93.85.32:8088",
         # Añadir dominios de producción si es necesario
     ]
     
