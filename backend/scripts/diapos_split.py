@@ -28,6 +28,9 @@ if not logger.handlers:
 STORAGE_DIR = Path(os.environ.get("STORAGE_DIR", "./storage"))
 STORAGE_DIR.mkdir(exist_ok=True, parents=True)
 
+# DEFINIR EL ROUTER COMO VARIABLE GLOBAL igual que en diapos_autofit.py
+router = APIRouter(prefix="/api/pptx", tags=["pptx"])
+
 def split_presentation(
     input_file: str, 
     output_dir: Optional[str] = None, 
@@ -217,102 +220,98 @@ def process_pptx_task(input_path: str, output_dir: str, slides_per_chunk: int, j
         except Exception as e:
             logger.error(f"Error limpiando temporales: {str(e)}")
 
-def get_router() -> APIRouter:
-    """Crea y devuelve el router con los endpoints para dividir PPTX"""
-    router = APIRouter(prefix="/api/pptx", tags=["pptx"])
+# Definir los endpoints directamente en el router global
+@router.post("/split")
+async def split_pptx_endpoint(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    slides_per_chunk: int = Form(20)
+) -> JSONResponse:
+    try:
+        logger.info(f"Solicitud recibida: archivo={file.filename}, slides_per_chunk={slides_per_chunk}")
+        
+        # Validar parámetros
+        if not file.filename or not file.filename.lower().endswith(".pptx"):
+            raise HTTPException(status_code=400, detail="El archivo debe ser PPTX")
+        
+        if not 1 <= slides_per_chunk <= 100:
+            raise HTTPException(status_code=400, detail="El número de diapositivas debe estar entre 1 y 100")
+        
+        # Crear directorios temporales
+        temp_dir = tempfile.mkdtemp()
+        input_path = os.path.join(temp_dir, file.filename)
+        output_dir = os.path.join(temp_dir, "output")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Guardar archivo
+        total_size = 0
+        with open(input_path, "wb") as buffer:
+            chunk_size = 1024 * 1024  # 1MB chunks
+            while chunk := await file.read(chunk_size):
+                buffer.write(chunk)
+                total_size += len(chunk)
+        
+        logger.info(f"Archivo guardado: {input_path} ({total_size/1024/1024:.2f} MB)")
+        
+        # Generar ID de trabajo e iniciar tarea
+        job_id = str(uuid.uuid4())
+        background_tasks.add_task(process_pptx_task, input_path, output_dir, slides_per_chunk, job_id)
+        logger.info(f"Tarea iniciada: job_id={job_id}")
+        
+        # Devolver respuesta inmediata
+        return JSONResponse({
+            "job_id": job_id,
+            "status": "processing",
+            "message": "Procesando presentación en segundo plano"
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error inesperado: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
 
-    @router.post("/split")
-    async def split_pptx_endpoint(
-        background_tasks: BackgroundTasks,
-        file: UploadFile = File(...),
-        slides_per_chunk: int = Form(20)
-    ) -> JSONResponse:
-        try:
-            logger.info(f"Solicitud recibida: archivo={file.filename}, slides_per_chunk={slides_per_chunk}")
-            
-            # Validar parámetros
-            if not file.filename or not file.filename.lower().endswith(".pptx"):
-                raise HTTPException(status_code=400, detail="El archivo debe ser PPTX")
-            
-            if not 1 <= slides_per_chunk <= 100:
-                raise HTTPException(status_code=400, detail="El número de diapositivas debe estar entre 1 y 100")
-            
-            # Crear directorios temporales
-            temp_dir = tempfile.mkdtemp()
-            input_path = os.path.join(temp_dir, file.filename)
-            output_dir = os.path.join(temp_dir, "output")
-            os.makedirs(output_dir, exist_ok=True)
-            
-            # Guardar archivo
-            total_size = 0
-            with open(input_path, "wb") as buffer:
-                chunk_size = 1024 * 1024  # 1MB chunks
-                while chunk := await file.read(chunk_size):
-                    buffer.write(chunk)
-                    total_size += len(chunk)
-            
-            logger.info(f"Archivo guardado: {input_path} ({total_size/1024/1024:.2f} MB)")
-            
-            # Generar ID de trabajo e iniciar tarea
-            job_id = str(uuid.uuid4())
-            background_tasks.add_task(process_pptx_task, input_path, output_dir, slides_per_chunk, job_id)
-            logger.info(f"Tarea iniciada: job_id={job_id}")
-            
-            # Devolver respuesta inmediata
-            return JSONResponse({
-                "job_id": job_id,
-                "status": "processing",
-                "message": "Procesando presentación en segundo plano"
-            })
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Error inesperado: {str(e)}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
+@router.get("/jobs/{job_id}")
+async def get_job_status(job_id: str) -> JSONResponse:
+    result_file = STORAGE_DIR / f"{job_id}_result.json"
+    
+    if not result_file.exists():
+        return JSONResponse({
+            "job_id": job_id,
+            "status": "processing",
+            "message": "El trabajo sigue en proceso"
+        })
+    
+    try:
+        with open(result_file, "r", encoding="utf-8") as f:
+            return JSONResponse(json.load(f))
+    except Exception as e:
+        logger.error(f"Error leyendo resultado {result_file}: {str(e)}")
+        return JSONResponse({
+            "job_id": job_id,
+            "status": "error",
+            "message": f"Error al recuperar el estado: {str(e)}"
+        })
 
-    @router.get("/jobs/{job_id}")
-    async def get_job_status(job_id: str) -> JSONResponse:
-        result_file = STORAGE_DIR / f"{job_id}_result.json"
-        
-        if not result_file.exists():
-            return JSONResponse({
-                "job_id": job_id,
-                "status": "processing",
-                "message": "El trabajo sigue en proceso"
-            })
-        
-        try:
-            with open(result_file, "r", encoding="utf-8") as f:
-                return JSONResponse(json.load(f))
-        except Exception as e:
-            logger.error(f"Error leyendo resultado {result_file}: {str(e)}")
-            return JSONResponse({
-                "job_id": job_id,
-                "status": "error",
-                "message": f"Error al recuperar el estado: {str(e)}"
-            })
+@router.get("/files/{file_id}/{filename}")
+async def get_file(file_id: str, filename: str) -> FileResponse:
+    file_path = STORAGE_DIR / file_id / filename
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    )
 
-    @router.get("/files/{file_id}/{filename}")
-    async def get_file(file_id: str, filename: str) -> FileResponse:
-        file_path = STORAGE_DIR / file_id / filename
-        
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail="Archivo no encontrado")
-        
-        return FileResponse(
-            path=file_path,
-            filename=filename,
-            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        )
-        
-    return router
-
+# Función para crear API independiente (mantener para retrocompatibilidad)
 def create_api():
-    """Crea y devuelve una aplicación FastAPI independiente con el router de división PPTX"""
     app = FastAPI(title="PPTX Splitter API")
-    app.include_router(get_router())
+    app.include_router(router)
     return app
 
+# Función para iniciar API independiente
 def api_main():
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
@@ -321,5 +320,9 @@ def api_main():
     logger.info(f"Iniciando API en http://{host}:{port}")
     uvicorn.run(app, host=host, port=port)
 
+# Función para obtener el router, siguiendo el mismo patrón que diapos_autofit.py
+get_router = lambda: router
+
+# Punto de entrada
 if __name__ == "__main__":
     sys.exit(cli_main())

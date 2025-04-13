@@ -49,7 +49,7 @@ app.mount("/storage", StaticFiles(directory=STORAGE_DIR), name="storage")
 
 # Incluir routers
 app.include_router(get_autofit_router())
-app.include_router(get_split_router())  # Ahora incluimos directamente el router de split_pptx
+app.include_router(get_split_router())
 
 @app.get("/root")
 async def root():
