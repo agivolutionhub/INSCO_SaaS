@@ -44,7 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     htop \
     iputils-ping \
     telnet \
-    netcat \
+    netcat-openbsd \
     lsof \
     traceroute \
     dnsutils \
