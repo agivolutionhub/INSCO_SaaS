@@ -1,173 +1,238 @@
 #!/bin/bash
+# =============================================================================
+# Script para iniciar los servidores de INSCO en segundo plano 
+# Diseñado para funcionar con systemd o de forma independiente
+# =============================================================================
 
-# Script para iniciar los servidores de INSCO en segundo plano (optimizado para systemd)
+# ========================= CONFIGURACIÓN GENERAL =============================
+# IP del servidor VPS (configurable mediante variable de entorno SERVER_IP)
+VPS_IP=${SERVER_IP:-"147.93.85.32"}
 
-# IP del servidor VPS
-VPS_IP="147.93.85.32"
+# Puertos de servicios (configurables mediante variables de entorno)
+BACKEND_PORT=${BACKEND_PORT:-8088}
+FRONTEND_PORT=${FRONTEND_PORT:-3001}
 
 # Obtener directorio de instalación
 INSCO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Configurar directorio
-cd "$INSCO_DIR"
+# Archivo de logs
+BACKEND_LOG="$INSCO_DIR/backend.log"
+FRONTEND_LOG="$INSCO_DIR/frontend.log"
+
+# Archivos PID
+BACKEND_PID_FILE="$INSCO_DIR/backend.pid"
+FRONTEND_PID_FILE="$INSCO_DIR/frontend.pid"
+
+# ========================= FUNCIONES AUXILIARES ==============================
+
+# Función para mostrar mensajes con formato
+log() {
+    local msg_type=$1
+    local message=$2
+    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    
+    case $msg_type in
+        "INFO")  echo -e "$timestamp [INFO] $message" ;;
+        "WARN")  echo -e "$timestamp [WARN] $message" ;;
+        "ERROR") echo -e "$timestamp [ERROR] $message" ;;
+        *)       echo -e "$timestamp $message" ;;
+    esac
+}
 
 # Función para liberar un puerto matando cualquier proceso que lo esté usando
 liberar_puerto() {
     local puerto=$1
-    echo "Verificando si el puerto $puerto está en uso..."
+    log "INFO" "Verificando si el puerto $puerto está en uso..."
     
     # Obtener PIDs de procesos usando el puerto especificado
     local pid_list=$(lsof -i:$puerto -t 2>/dev/null)
     
     if [ -n "$pid_list" ]; then
-        echo "Puerto $puerto ocupado por los siguientes procesos: $pid_list"
-        echo "Matando procesos para liberar el puerto..."
+        log "WARN" "Puerto $puerto ocupado por los siguientes procesos: $pid_list"
+        log "INFO" "Matando procesos para liberar el puerto..."
         for pid in $pid_list; do
-            echo "Matando proceso $pid"
+            log "INFO" "Matando proceso $pid"
             kill -9 $pid 2>/dev/null
         done
         # Esperar a que se libere el puerto
         sleep 2
-        echo "Puerto $puerto liberado."
+        log "INFO" "Puerto $puerto liberado."
     else
-        echo "Puerto $puerto disponible."
+        log "INFO" "Puerto $puerto disponible."
     fi
 }
 
-# Configurar URL de API para el frontend
-echo "VITE_API_URL=http://$VPS_IP:8088/api" > frontend/.env
-echo "Configurada API URL: http://$VPS_IP:8088/api"
+# Función para verificar que un servicio esté respondiendo
+verificar_servicio() {
+    local nombre=$1
+    local url=$2
+    local intentos=$3
+    local tiempo_espera=${4:-1}
+    
+    log "INFO" "Verificando que el servicio $nombre esté disponible..."
+    for i in $(seq 1 $intentos); do
+        if curl -s "$url" > /dev/null; then
+            log "INFO" "$nombre disponible"
+            return 0
+        fi
+        
+        if [ $i -eq $intentos ]; then
+            log "ERROR" "$nombre no disponible después de $intentos intentos"
+            return 1
+        fi
+        sleep $tiempo_espera
+    done
+}
 
-# Liberar puerto del backend
-liberar_puerto 8088
-
-# Iniciar el backend
-cd backend
-# Activar entorno virtual si existe
-if [ -d "venv" ]; then
-    source venv/bin/activate
-fi
-
-# Comprobar dependencias
-pip install -r requirements.txt
-
-# Iniciar uvicorn para el backend usando nohup para que sobreviva al cierre de la terminal
-echo "Iniciando backend con nohup..."
-nohup python -m uvicorn main:app --host 0.0.0.0 --port 8088 > "$INSCO_DIR/backend.log" 2>&1 &
-BACKEND_PID=$!
-echo "Backend iniciado con PID: $BACKEND_PID"
-echo $BACKEND_PID > "$INSCO_DIR/backend.pid"
-cd ..
-
-# Esperar a que el backend esté disponible
-echo "Esperando a que el backend esté disponible..."
-for i in {1..30}; do
-    if curl -s http://localhost:8088/api/root > /dev/null; then
-        echo "Backend disponible"
-        break
+# Función para iniciar el backend
+iniciar_backend() {
+    log "INFO" "Iniciando backend..."
+    cd "$INSCO_DIR/backend"
+    
+    # Activar entorno virtual si existe
+    if [ -d "venv" ]; then
+        source venv/bin/activate
     fi
-    if [ $i -eq 30 ]; then
-        echo "ERROR: Backend no disponible después de 30 intentos"
-        exit 1
+    
+    # Comprobar dependencias
+    pip install -r requirements.txt
+    
+    # Iniciar uvicorn con nohup
+    log "INFO" "Iniciando backend con nohup en puerto $BACKEND_PORT..."
+    nohup python -m uvicorn main:app --host 0.0.0.0 --port $BACKEND_PORT > "$BACKEND_LOG" 2>&1 &
+    BACKEND_PID=$!
+    echo $BACKEND_PID > "$BACKEND_PID_FILE"
+    log "INFO" "Backend iniciado con PID: $BACKEND_PID"
+    
+    cd "$INSCO_DIR"
+    
+    # Verificar que el backend esté funcionando
+    if ! verificar_servicio "Backend" "http://localhost:$BACKEND_PORT/api/root" 30; then
+        return 1
     fi
-    sleep 1
-done
+    
+    return 0
+}
 
-# Liberar puerto del frontend
-liberar_puerto 3001
-
-# Iniciar el frontend
-cd frontend
-echo "Instalando dependencias del frontend..."
-npm install
-
-# Asegurarse de que TypeScript esté instalado globalmente
-echo "Verificando instalación de TypeScript..."
-if ! command -v tsc &> /dev/null; then
-    echo "TypeScript no encontrado, instalando globalmente..."
-    npm install -g typescript
-fi
-
-# Construir el frontend
-echo "Construyendo el frontend..."
-npm run build
-
-# Iniciar el servidor de frontend con nohup y forzar el puerto 3001
-echo "Iniciando servidor de frontend con nohup en puerto 3001..."
-nohup npx serve -s dist -l 3001 --no-port-switching --cors > "$INSCO_DIR/frontend.log" 2>&1 &
-FRONTEND_PID=$!
-echo "Frontend iniciado con PID: $FRONTEND_PID"
-echo $FRONTEND_PID > "$INSCO_DIR/frontend.pid"
-cd ..
-
-# Verificar que ambos servicios están activos
-if ! ps -p $BACKEND_PID > /dev/null || ! ps -p $FRONTEND_PID > /dev/null; then
-    echo "ERROR: Al menos uno de los servicios no está funcionando"
-    exit 1
-fi
-
-# Verificar específicamente que el frontend está escuchando en el puerto 3001
-echo "Verificando que el frontend esté escuchando en el puerto 3001..."
-for i in {1..10}; do
-    if curl -s http://localhost:3001 > /dev/null; then
-        echo "Frontend disponible en puerto 3001"
-        break
+# Función para iniciar el frontend
+iniciar_frontend() {
+    log "INFO" "Iniciando frontend..."
+    cd "$INSCO_DIR/frontend"
+    
+    log "INFO" "Instalando dependencias del frontend..."
+    npm install
+    
+    # Asegurarse de que TypeScript esté instalado globalmente
+    log "INFO" "Verificando instalación de TypeScript..."
+    if ! command -v tsc &> /dev/null; then
+        log "INFO" "TypeScript no encontrado, instalando globalmente..."
+        npm install -g typescript
     fi
-    if [ $i -eq 10 ]; then
-        echo "ADVERTENCIA: Frontend no responde en puerto 3001. Verificando puerto real..."
+    
+    # Construir el frontend
+    log "INFO" "Construyendo el frontend..."
+    npm run build
+    
+    # Iniciar el servidor con nohup forzando el puerto especificado
+    log "INFO" "Iniciando servidor de frontend con nohup en puerto $FRONTEND_PORT..."
+    nohup npx serve -s dist -l $FRONTEND_PORT --no-port-switching --cors > "$FRONTEND_LOG" 2>&1 &
+    FRONTEND_PID=$!
+    echo $FRONTEND_PID > "$FRONTEND_PID_FILE"
+    log "INFO" "Frontend iniciado con PID: $FRONTEND_PID"
+    
+    cd "$INSCO_DIR"
+    
+    # Verificar que el frontend esté en el puerto correcto
+    if ! verificar_servicio "Frontend" "http://localhost:$FRONTEND_PORT" 10; then
+        log "WARN" "Frontend no responde en puerto $FRONTEND_PORT. Verificando puerto real..."
         # Intentar detectar en qué puerto está realmente
         puerto_real=$(netstat -tlnp 2>/dev/null | grep "$FRONTEND_PID" | awk '{print $4}' | awk -F: '{print $NF}')
         if [ -n "$puerto_real" ]; then
-            echo "ADVERTENCIA: Frontend está usando el puerto $puerto_real en lugar de 3001"
-            echo "Frontend: http://$VPS_IP:$puerto_real (PUERTO INCORRECTO)"
+            log "WARN" "Frontend está usando el puerto $puerto_real en lugar de $FRONTEND_PORT"
+            log "WARN" "Frontend: http://$VPS_IP:$puerto_real (PUERTO INCORRECTO)"
+            return 1
         else
-            echo "ERROR: No se puede determinar en qué puerto está el frontend"
+            log "ERROR" "No se puede determinar en qué puerto está el frontend"
+            return 1
         fi
     fi
-    sleep 1
-done
+    
+    return 0
+}
 
-echo "INSCO SaaS iniciado correctamente en modo servicio"
-echo "Backend: http://$VPS_IP:8088/api/root"
-echo "Frontend: http://$VPS_IP:3001"
-echo "Backend log: $INSCO_DIR/backend.log"
-echo "Frontend log: $INSCO_DIR/frontend.log"
+# ========================= PROGRAMA PRINCIPAL ===============================
 
-# Si se ejecuta manualmente (no a través de systemd), podemos salir aquí
-if [[ -z "${INVOCATION_ID}" ]]; then  # Esta variable solo existe en contexto systemd
-    echo "Servicios iniciados en segundo plano. Puedes cerrar la terminal."
-    echo "Para detener los servicios: kill $BACKEND_PID $FRONTEND_PID"
-    exit 0
-fi
-
-# Si llegamos aquí, es porque se está ejecutando a través de systemd
-# Mantenerse en primer plano para systemd
-# Crear un archivo para indicar que está corriendo
-touch "$INSCO_DIR/insco.running"
-
-# Bucle infinito con comprobación de estado
-while true; do
-    if ! ps -p $BACKEND_PID > /dev/null; then
-        echo "ADVERTENCIA: Backend caído, reiniciando..."
-        cd backend
-        # Liberar puerto antes de reiniciar
-        liberar_puerto 8088
-        nohup python -m uvicorn main:app --host 0.0.0.0 --port 8088 > "$INSCO_DIR/backend.log" 2>&1 &
-        BACKEND_PID=$!
-        echo $BACKEND_PID > "$INSCO_DIR/backend.pid"
-        cd ..
+main() {
+    log "INFO" "======= Iniciando INSCO SaaS ======="
+    
+    # Configurar directorio
+    cd "$INSCO_DIR"
+    
+    # Configurar URL de API para el frontend
+    log "INFO" "Configurando API URL: http://$VPS_IP:$BACKEND_PORT/api"
+    echo "VITE_API_URL=http://$VPS_IP:$BACKEND_PORT/api" > frontend/.env
+    
+    # Liberar puertos antes de iniciar servicios
+    liberar_puerto $BACKEND_PORT
+    liberar_puerto $FRONTEND_PORT
+    
+    # Iniciar backend
+    iniciar_backend
+    if [ $? -ne 0 ]; then
+        log "ERROR" "Fallo al iniciar el backend"
+        exit 1
     fi
     
-    if ! ps -p $FRONTEND_PID > /dev/null; then
-        echo "ADVERTENCIA: Frontend caído, reiniciando..."
-        cd frontend
-        # Liberar puerto antes de reiniciar
-        liberar_puerto 3001
-        nohup npx serve -s dist -l 3001 --no-port-switching --cors > "$INSCO_DIR/frontend.log" 2>&1 &
-        FRONTEND_PID=$!
-        echo $FRONTEND_PID > "$INSCO_DIR/frontend.pid"
-        cd ..
+    # Iniciar frontend
+    iniciar_frontend
+    if [ $? -ne 0 ]; then
+        log "ERROR" "Fallo al iniciar el frontend"
+        exit 1
     fi
     
-    sleep 30
-done 
+    # Verificar que ambos servicios están activos
+    if ! ps -p $BACKEND_PID > /dev/null || ! ps -p $FRONTEND_PID > /dev/null; then
+        log "ERROR" "Al menos uno de los servicios no está funcionando"
+        exit 1
+    fi
+    
+    # Mostrar información sobre los servicios iniciados
+    log "INFO" "======= INSCO SaaS iniciado correctamente ======="
+    log "INFO" "Backend: http://$VPS_IP:$BACKEND_PORT/api/root"
+    log "INFO" "Frontend: http://$VPS_IP:$FRONTEND_PORT"
+    log "INFO" "Backend log: $BACKEND_LOG"
+    log "INFO" "Frontend log: $FRONTEND_LOG"
+    
+    # Si se ejecuta manualmente (no a través de systemd), salir
+    if [[ -z "${INVOCATION_ID}" ]]; then  # Esta variable solo existe en contexto systemd
+        log "INFO" "Servicios iniciados en segundo plano. Puedes cerrar la terminal."
+        log "INFO" "Para detener los servicios: kill $BACKEND_PID $FRONTEND_PID"
+        exit 0
+    fi
+    
+    # Si se ejecuta a través de systemd, mantener el proceso en primer plano
+    log "INFO" "Ejecutándose en modo systemd, vigilando servicios..."
+    touch "$INSCO_DIR/insco.running"
+    
+    # Bucle de monitoreo para systemd
+    while true; do
+        # Verificar backend
+        if ! ps -p $BACKEND_PID > /dev/null; then
+            log "WARN" "Backend caído, reiniciando..."
+            liberar_puerto $BACKEND_PORT
+            iniciar_backend
+        fi
+        
+        # Verificar frontend
+        if ! ps -p $FRONTEND_PID > /dev/null; then
+            log "WARN" "Frontend caído, reiniciando..."
+            liberar_puerto $FRONTEND_PORT
+            iniciar_frontend
+        fi
+        
+        sleep 30
+    done
+}
+
+# Iniciar el programa
+main 
