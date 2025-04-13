@@ -35,7 +35,7 @@ Cada fase será documentada con su fecha, cambios realizados y resultado.
 ### Fase 1: Estructura básica y configuración de entorno
 
 - **Fecha**: 12-04-2025
-- **Estado**: En desarrollo
+- **Estado**: Completo
 - **Cambios**:
   - Creada estructura base de directorios (routes, services, scripts)
   - Migrado setup_env.py para cargar credenciales de OpenAI
@@ -47,4 +47,26 @@ Cada fase será documentada con su fecha, cambios realizados y resultado.
 - **Simplificaciones**:
   - Eliminadas configuraciones de APIs adicionales (STT, TTS)
   - Reducido a solo gestión de credenciales básicas de OpenAI
-- **Próximos pasos**: Añadir utilidades básicas para manejo de archivos 
+- **Resultado**: Backend con estructura básica y capacidad de cargar configuración
+
+### Fase 2: Consolidación de configuración y actualización de dependencias
+
+- **Fecha**: 12-04-2025
+- **Estado**: Completo
+- **Cambios**:
+  - Consolidados todos los archivos JSON de configuración en un solo archivo auth_credentials.json
+  - Unificados parámetros para diferentes modelos (chat, transcripción, TTS, traducción)
+  - Actualizado requirements.txt con todas las dependencias del proyecto original
+  - Configurado servicio systemd para ejecución persistente
+- **Archivos actualizados**:
+  - config/auth_credentials.json
+  - requirements.txt
+- **Archivos añadidos**:
+  - insco.service
+  - start_background.sh
+  - setup_service.sh
+- **Mejoras**:
+  - Simplificación de la gestión de credenciales
+  - Preparación para migración de funcionalidades avanzadas
+  - Soporte para ejecución como servicio del sistema
+- **Próximos pasos**: Migrar servicios básicos y utilidades 
