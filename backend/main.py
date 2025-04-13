@@ -50,12 +50,15 @@ app.mount("/storage", StaticFiles(directory=STORAGE_DIR), name="storage")
 # Incluir routers
 app.include_router(get_autofit_router())
 
-# Obtenemos el router de diapos_split (la función create_api devuelve una app FastAPI) 
-# y obtenemos su router para incluirlo en nuestra app principal
+# Obtener la aplicación split_pptx que contiene las rutas para dividir presentaciones
 split_app = create_api()
-for router in split_app.routes:
-    if hasattr(router, "include_in_schema") and router.include_in_schema:
-        app.routes.append(router)
+
+# Obtener el router principal dentro de la app split_pptx
+# En lugar de añadir directamente las rutas, encontramos el router con el prefijo adecuado
+# e incluimos ese router en nuestra aplicación principal
+for route in split_app.routes:
+    if hasattr(route, "path") and route.path.startswith("/api/pptx"):
+        app.routes.append(route)
 
 @app.get("/root")
 async def root():
