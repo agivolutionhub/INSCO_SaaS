@@ -22,8 +22,7 @@ def setup_env():
         "OPENAI_ASSISTANT_ID": None,
         "OPENAI_MODEL": None,
         "OPENAI_TRANSCRIPTION_MODEL": None,
-        "OPENAI_TTS_MODEL": None,
-        "OPENAI_TRANSLATION_MODEL": None
+        "OPENAI_TTS_MODEL": None
     }
     
     # Configuración adicional
@@ -94,8 +93,7 @@ def _load_model_configs(models, variables):
     model_mappings = {
         "chat": "OPENAI_MODEL",
         "transcription": "OPENAI_TRANSCRIPTION_MODEL",
-        "tts": "OPENAI_TTS_MODEL",
-        "translation": "OPENAI_TRANSLATION_MODEL"
+        "tts": "OPENAI_TTS_MODEL"
     }
     
     for model_type, env_var in model_mappings.items():
