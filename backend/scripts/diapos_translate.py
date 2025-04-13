@@ -16,8 +16,8 @@ router = APIRouter(prefix="/api/translate", tags=["translate"])
 
 # Configuración global
 CONFIG = {
-    "storage_dir": Path(os.environ.get("STORAGE_DIR", "./storage")),
-    "cache_dir": Path(os.environ.get("CACHE_DIR", "/app/config/cache")),
+    "storage_dir": Path(os.environ.get("STORAGE_DIR", "/app/storage")),
+    "cache_dir": Path(os.environ.get("CACHE_DIR", "/app/storage/cache")),
     "supported_languages": ["es", "en", "fr", "de", "it", "pt"],
     "retries": 3,
     "wait_times": {"base": 2.0, "max": 30.0, "backoff": 2.0},
@@ -26,22 +26,34 @@ CONFIG = {
     "batch_size": 10
 }
 
-# Rutas posibles para credenciales (en orden de prioridad)
+# Rutas posibles para credenciales (solo como fallback)
 CREDENTIALS_PATHS = [
     # Ruta desde variable de entorno
     os.environ.get("CREDENTIALS_FILE"),
     # Rutas para entorno de producción
     "/app/config/auth_credentials.json",
-    "/app/backend/config/auth_credentials.json",
     # Rutas para entorno de desarrollo
     Path(__file__).parent.parent / "config" / "auth_credentials.json",
     Path.cwd() / "backend" / "config" / "auth_credentials.json"
 ]
 
-# Crear directorios necesarios
-CONFIG["storage_dir"].mkdir(exist_ok=True, parents=True)
-CONFIG["cache_dir"].mkdir(exist_ok=True, parents=True)
-CACHE_FILE = CONFIG["cache_dir"] / "translations.json"
+# Crear directorios necesarios con permisos adecuados
+try:
+    CONFIG["storage_dir"].mkdir(exist_ok=True, parents=True, mode=0o777)
+    CONFIG["cache_dir"].mkdir(exist_ok=True, parents=True, mode=0o777)
+    CACHE_FILE = CONFIG["cache_dir"] / "translations.json"
+    logger.info(f"Directorios creados: {CONFIG['storage_dir']} y {CONFIG['cache_dir']}")
+except Exception as e:
+    logger.warning(f"No se pudieron crear directorios con permisos: {e}")
+    # Fallback a directorios temporales si no podemos escribir en las rutas configuradas
+    import tempfile
+    temp_dir = Path(tempfile.gettempdir())
+    CONFIG["storage_dir"] = temp_dir / "pptx_translate_storage"
+    CONFIG["cache_dir"] = temp_dir / "pptx_translate_cache"
+    CONFIG["storage_dir"].mkdir(exist_ok=True, parents=True)
+    CONFIG["cache_dir"].mkdir(exist_ok=True, parents=True)
+    CACHE_FILE = CONFIG["cache_dir"] / "translations.json"
+    logger.info(f"Usando directorios temporales: {CONFIG['storage_dir']} y {CONFIG['cache_dir']}")
 
 # Configurar logger
 logger = logging.getLogger("translate-pptx")
@@ -52,22 +64,8 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 def load_credentials():
-    """Carga configuración y credenciales desde el archivo JSON o usa las embebidas"""
-    # Primero intentar cargar desde archivo
-    for path in CREDENTIALS_PATHS:
-        if not path:
-            continue
-            
-        try:
-            path = Path(path) if not isinstance(path, Path) else path
-            if path.exists():
-                logger.info(f"Cargando credenciales desde: {path}")
-                with open(path, "r", encoding="utf-8") as f:
-                    return json.load(f)
-        except Exception as e:
-            logger.warning(f"Error accediendo a {path}: {e}")
-    
-    # Si no se encontró archivo, crear un diccionario con las credenciales embebidas
+    """Carga configuración y credenciales, usando primero las embebidas"""
+    # Usar las credenciales embebidas como primera opción
     logger.info("Usando credenciales embebidas en el código")
     return {
         "openai": {
@@ -226,6 +224,11 @@ class Translator:
         # Traducir usando el asistente de OpenAI
         translated_texts = self._translate_with_assistant(non_empty_texts, source_language)
         
+        # Crear un diccionario de traducciones para que _update_slides pueda usar get()
+        translations_dict = {}
+        for original, translated in zip(non_empty_texts, translated_texts):
+            translations_dict[original] = translated
+        
         # Reinsertamos los textos vacíos en sus posiciones originales
         final_translations = []
         non_empty_idx = 0
@@ -241,7 +244,13 @@ class Translator:
                     final_translations.append("")  # Por si acaso hay algún problema
         
         # Devolver el resultado en el mismo formato que se recibió
-        return final_translations[0] if single_text else final_translations
+        if single_text:
+            return final_translations[0]
+        else:
+            # Para compatibilidad con _update_slides cuando se usa desde process_pptx
+            if hasattr(self, '_current_translations_dict'):
+                self._current_translations_dict = translations_dict
+            return translations_dict if len(translations_dict) > 0 else final_translations
     
     def _translate_batch(self, texts):
         """Divide y traduce textos en lotes óptimos"""
@@ -274,6 +283,7 @@ class Translator:
         content = f"""
 Traduce los siguientes textos de {source_language} a {self.target_language}. 
 Devuelve SOLO los textos traducidos, conservando el formato original de enumeración [1], [2], etc.
+No incluyas elementos adicionales, solo la traducción con su enumeración.
 
 {batch_texts}
 """
@@ -309,7 +319,7 @@ Devuelve SOLO los textos traducidos, conservando el formato original de enumerac
                 # 4. Esperar a que se complete la ejecución
                 total_wait_time = 0
                 max_wait_time = 180  # Tiempo máximo de espera: 3 minutos
-                check_interval = 1  # Intervalo de verificación: 1 segundo
+                check_interval = 1    # Intervalo de verificación: 1 segundo
                 
                 while run.status not in ["completed", "failed", "cancelled", "expired"]:
                     if total_wait_time >= max_wait_time:
@@ -391,12 +401,26 @@ Devuelve SOLO los textos traducidos, conservando el formato original de enumerac
                 if not matches or len(matches) < len(texts):
                     logger.warning(f"No se encontraron suficientes coincidencias. Procesando líneas...")
                     lines = translation_text.strip().split("\n")
-                    translations = [line.strip() for line in lines if line.strip()]
+                    translations_lines = []
+                    
+                    for line in lines:
+                        if line.strip():
+                            # Limpiar cualquier numeración al inicio de la línea
+                            cleaned_line = re.sub(r'^\s*\[\d+\]\s*', '', line.strip())
+                            translations_lines.append(cleaned_line)
+                    
+                    translations = translations_lines
                     logger.info(f"Líneas procesadas: {len(translations)}")
                 else:
                     # Ordenar las coincidencias por número y extraer solo el texto
                     sorted_matches = sorted(matches, key=lambda x: int(x[0]))
-                    translations = [match[1].strip() for match in sorted_matches]
+                    translations = []
+                    
+                    for _, text in sorted_matches:
+                        # Asegurarnos de que no queden números en corchetes en el texto
+                        cleaned_text = re.sub(r'^\s*\[\d+\]\s*', '', text.strip())
+                        translations.append(cleaned_text)
+                    
                     logger.info(f"Coincidencias procesadas: {len(translations)}")
                 
                 # Verificar que tenemos el mismo número de traducciones que de textos originales
