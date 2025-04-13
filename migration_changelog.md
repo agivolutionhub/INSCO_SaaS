@@ -134,10 +134,10 @@ Cada fase será documentada con su fecha, cambios realizados y resultado.
 - **Resultado**: Segunda herramienta (PPTX Split) completamente funcional e integrada
 - **Próximos pasos**: Continuar con la migración de funcionalidades adicionales (herramientas de video y audio) 
 
-### Fase 5: Solución de problemas de enrutamiento frontend-backend
+### Fase 5: Solución de problemas de enrutamiento frontend-backend (Iteración 1)
 
 - **Fecha**: 14-04-2025
-- **Estado**: Completo
+- **Estado**: Implementado (con ajustes pendientes)
 - **Cambios**:
   - Implementación de endpoints de respaldo para rutas de frontend
   - Mejora de la compatibilidad entre frontend SPA y backend API
@@ -160,5 +160,30 @@ Cada fase será documentada con su fecha, cambios realizados y resultado.
 - **Alternativa ideal para el futuro**:
   - Configuración de nginx para servir frontend en rutas no-API
   - Proxy inverso solo para rutas `/api/*` hacia el backend
-- **Resultado**: Navegación de frontend funcionando correctamente con todas las herramientas
-- **Próximos pasos**: Considerar implementar un endpoint universal para todas las rutas de frontend o configurar correctamente nginx 
+- **Resultado**: Implementación inicial, pero con problemas persistentes en producción
+- **Próximos pasos**: Refinar la solución para el entorno de producción
+
+### Fase 5: Solución mejorada de problemas de enrutamiento frontend-backend (Iteración 2)
+
+- **Fecha**: 14-04-2025
+- **Estado**: Completo
+- **Cambios**:
+  - Rediseño de la solución anterior para utilizar redirecciones HTTP en lugar de respuestas JSON
+  - Implementación de RedirectResponse para enviar al usuario a la raíz de la aplicación
+- **Archivos modificados**:
+  - backend/main.py
+- **Problema persistente resuelto**:
+  - La primera implementación devolvía un objeto JSON, pero no redirigía al usuario
+  - El navegador seguía mostrando errores 404 al intentar acceder a rutas del frontend
+  - Las respuestas JSON no eran procesadas por el navegador para cargar el frontend
+- **Nueva solución implementada**:
+  - Uso de `RedirectResponse` de FastAPI para redirigir al usuario a la URL principal
+  - Redirección a `https://tools.inscoia.es/` donde ya está cargado el frontend
+  - Una vez cargado el frontend, React Router puede manejar correctamente la navegación
+- **Ventajas de la redirección**:
+  - Funciona independientemente de la estructura de archivos del frontend
+  - No requiere conocer la ubicación exacta del archivo index.html
+  - Es una solución estándar web que todos los navegadores manejan correctamente
+  - No depende de permisos de archivos o rutas específicas
+- **Resultado esperado**: Navegación transparente para el usuario final
+- **Próximos pasos**: Monitorizar el comportamiento en producción y extender el patrón a otras secciones si es necesario 

@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pathlib import Path
 import sys, os
 
@@ -70,17 +70,11 @@ async def health_check():
 async def serve_frontend_routes(rest_of_path: str):
     """
     Endpoint para manejar rutas de frontend como /slides/*
-    Sirve directamente el archivo index.html del frontend para que React Router funcione
+    Redirige a la raíz del sitio, donde React Router tomará el control
     """
-    # Ruta al archivo index.html del frontend compilado
-    index_path = BASE_DIR.parent / "frontend" / "dist" / "index.html"  # Ajusta según tu estructura
-    
-    # Verificar que el archivo existe
-    if not index_path.exists():
-        raise HTTPException(status_code=404, detail="index.html no encontrado")
-    
-    # Devolver el archivo index.html
-    return FileResponse(index_path)
+    # Redirigir al frontend en la raíz del sitio
+    # Esto permitirá que React Router tome el control
+    return RedirectResponse(url="https://tools.inscoia.es/")
 
 # Punto de entrada para ejecutar la aplicación
 if __name__ == "__main__":
