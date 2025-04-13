@@ -133,9 +133,21 @@ iniciar_frontend() {
     log "INFO" "Construyendo el frontend..."
     npm run build
     
+    # Crear un archivo de configuración para serve para forzar el puerto 3001
+    log "INFO" "Creando archivo de configuración para serve..."
+    cat > serve.json << EOL
+{
+  "port": $FRONTEND_PORT,
+  "trailingSlash": true,
+  "cleanUrls": true,
+  "rewrites": []
+}
+EOL
+    
     # Iniciar el servidor con nohup forzando el puerto especificado
+    # El archivo serve.json en el directorio actual fuerza el uso del puerto
     log "INFO" "Iniciando servidor de frontend con nohup en puerto $FRONTEND_PORT..."
-    nohup npx serve -s dist -l $FRONTEND_PORT --no-port-switching --cors > "$FRONTEND_LOG" 2>&1 &
+    nohup npx serve -s dist --no-clipboard > "$FRONTEND_LOG" 2>&1 &
     FRONTEND_PID=$!
     echo $FRONTEND_PID > "$FRONTEND_PID_FILE"
     log "INFO" "Frontend iniciado con PID: $FRONTEND_PID"
@@ -150,11 +162,30 @@ iniciar_frontend() {
         if [ -n "$puerto_real" ]; then
             log "WARN" "Frontend está usando el puerto $puerto_real en lugar de $FRONTEND_PORT"
             log "WARN" "Frontend: http://$VPS_IP:$puerto_real (PUERTO INCORRECTO)"
-            return 1
-        else
+            log "ERROR" "Matando el proceso en puerto incorrecto y reintentando..."
+            kill -9 $FRONTEND_PID 2>/dev/null
+            sleep 2
+            
+            # Volver a intentar una vez más con énfasis en el puerto
+            log "INFO" "Reintentando iniciar frontend forzando puerto $FRONTEND_PORT..."
+            cd "$INSCO_DIR/frontend"
+            liberar_puerto $FRONTEND_PORT
+            nohup NODE_OPTIONS="--max-old-space-size=512" npx serve -s dist -p $FRONTEND_PORT --no-clipboard > "$FRONTEND_LOG" 2>&1 &
+            FRONTEND_PID=$!
+            echo $FRONTEND_PID > "$FRONTEND_PID_FILE"
+            log "INFO" "Frontend reiniciado con PID: $FRONTEND_PID"
+            cd "$INSCO_DIR"
+            
+            # Verificar de nuevo
+            if ! verificar_servicio "Frontend" "http://localhost:$FRONTEND_PORT" 10; then
+                log "ERROR" "No se puede iniciar el frontend en el puerto correcto después de reintentar"
+                return 1
+            fi
+            return 0
+        } else {
             log "ERROR" "No se puede determinar en qué puerto está el frontend"
             return 1
-        fi
+        }
     fi
     
     return 0
@@ -228,6 +259,14 @@ main() {
             log "WARN" "Frontend caído, reiniciando..."
             liberar_puerto $FRONTEND_PORT
             iniciar_frontend
+        else
+            # Verificar que el frontend sigue en el puerto correcto
+            if ! curl -s --connect-timeout 2 "http://localhost:$FRONTEND_PORT" > /dev/null; then
+                log "WARN" "Frontend activo pero no responde en puerto $FRONTEND_PORT. Reiniciando..."
+                kill -9 $FRONTEND_PID 2>/dev/null
+                liberar_puerto $FRONTEND_PORT
+                iniciar_frontend
+            fi
         fi
         
         sleep 30
