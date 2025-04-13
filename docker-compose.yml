@@ -28,7 +28,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 4G
     labels:
       # Configuración para el frontend
       - "traefik.enable=true"
