@@ -80,6 +80,7 @@ logs/
 test-results/
 test-reports/
 coverage/
+test/
 
 # Frontend build
 frontend/dist
