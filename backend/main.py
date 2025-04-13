@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -65,15 +65,22 @@ async def health_check():
         "storage": STORAGE_DIR.exists()
     }
 
-# Nuevo endpoint para manejar rutas del frontend
+# Endpoint mejorado para manejar rutas del frontend
 @app.get("/slides/{rest_of_path:path}")
 async def serve_frontend_routes(rest_of_path: str):
     """
     Endpoint para manejar rutas de frontend como /slides/*
-    Permite que estas rutas lleguen al frontend y sean manejadas por React Router
+    Sirve directamente el archivo index.html del frontend para que React Router funcione
     """
-    # Redireccionar a la API correspondiente
-    return {"redirect": True, "message": "Esta ruta debe ser manejada por el frontend"}
+    # Ruta al archivo index.html del frontend compilado
+    index_path = BASE_DIR.parent / "frontend" / "dist" / "index.html"  # Ajusta según tu estructura
+    
+    # Verificar que el archivo existe
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="index.html no encontrado")
+    
+    # Devolver el archivo index.html
+    return FileResponse(index_path)
 
 # Punto de entrada para ejecutar la aplicación
 if __name__ == "__main__":
