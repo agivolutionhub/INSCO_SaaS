@@ -152,10 +152,38 @@ class Translator:
             # Inicializar cliente con solo el API key
             self.client = OpenAI(api_key=api_key)
             
+            # DEBUG: Verificar que el cliente y el assistant_id están correctamente cargados
+            logger.info(f"Verificación de cliente: {self.client is not None}")
+            logger.info(f"Tipo de cliente: {type(self.client).__name__}")
+            logger.info(f"Assistant ID verificación: '{self.assistant_id}'")
+            
+            # Intento de verificación del asistente (sin esperar respuesta)
+            try:
+                # Verificar asistente de forma no bloqueante
+                logger.info("Intentando verificar acceso al asistente...")
+                def verify_assistant():
+                    try:
+                        assistant = self.client.beta.assistants.retrieve(assistant_id=self.assistant_id)
+                        logger.info(f"✅ Asistente verificado: {assistant.name}")
+                        return True
+                    except Exception as e:
+                        logger.error(f"❌ Error al verificar asistente: {str(e)}")
+                        return False
+                
+                # Ejecutar en un hilo separado para no bloquear
+                import threading
+                threading.Thread(target=verify_assistant).start()
+            except Exception as e:
+                logger.warning(f"No se pudo verificar asistente: {e}")
+            
         except Exception as e:
             logger.error(f"Error al inicializar OpenAI: {e}")
             self.client = None
             self.assistant_id = None
+            
+            # DEBUG: Verificar qué falló
+            logger.error(f"client es None: {self.client is None}")
+            logger.error(f"assistant_id es None: {self.assistant_id is None}")
         
         # Inicializar caché
         if self.use_cache:
@@ -237,6 +265,8 @@ class Translator:
             return []
             
         if not self.client or not self.assistant_id:
+            logger.error("No se han configurado correctamente las credenciales de OpenAI")
+            logger.error(f"client: {self.client}, assistant_id: {self.assistant_id}")
             raise ValueError("No se han configurado correctamente las credenciales de OpenAI")
             
         # Preparar textos con formato
@@ -267,24 +297,46 @@ Devuelve SOLO los textos traducidos, conservando el formato original de enumerac
                     role="user",
                     content=content
                 )
+                logger.info(f"Mensaje enviado al thread: {message.id}")
                 
                 # 3. Ejecutar el asistente en el thread
                 run = self.client.beta.threads.runs.create(
                     thread_id=thread.id,
                     assistant_id=self.assistant_id
                 )
-                logger.info(f"Run iniciado: {run.id}")
+                logger.info(f"Run iniciado: {run.id} con status inicial: {run.status}")
                 
                 # 4. Esperar a que se complete la ejecución
-                while run.status != "completed":
-                    time.sleep(1)
+                total_wait_time = 0
+                max_wait_time = 180  # Tiempo máximo de espera: 3 minutos
+                check_interval = 1  # Intervalo de verificación: 1 segundo
+                
+                while run.status not in ["completed", "failed", "cancelled", "expired"]:
+                    if total_wait_time >= max_wait_time:
+                        logger.error(f"Tiempo de espera agotado después de {max_wait_time} segundos")
+                        raise Exception(f"Tiempo de espera agotado para el run {run.id}")
+                    
+                    time.sleep(check_interval)
+                    total_wait_time += check_interval
+                    
+                    # Verificar estado del run
                     run = self.client.beta.threads.runs.retrieve(
                         thread_id=thread.id,
                         run_id=run.id
                     )
                     
+                    logger.debug(f"Run {run.id} status después de {total_wait_time}s: {run.status}")
+                    
                     if run.status in ["failed", "cancelled", "expired"]:
-                        raise Exception(f"Error en la ejecución del asistente: {run.status}")
+                        error_details = getattr(run, 'last_error', 'No hay detalles adicionales')
+                        logger.error(f"Run terminó con estado {run.status}. Detalles: {error_details}")
+                        raise Exception(f"Error en la ejecución del asistente: {run.status} - {error_details}")
+                
+                if run.status != "completed":
+                    logger.error(f"Estado del run inesperado: {run.status}")
+                    raise Exception(f"Estado del run inesperado: {run.status}")
+                
+                logger.info(f"Run completado: {run.id} con status final: {run.status}")
                 
                 # 5. Obtener la respuesta del asistente
                 messages = self.client.beta.threads.messages.list(
@@ -294,14 +346,36 @@ Devuelve SOLO los textos traducidos, conservando el formato original de enumerac
                 # El primer mensaje del asistente contiene la traducción
                 assistant_messages = [msg for msg in messages.data if msg.role == "assistant"]
                 if not assistant_messages:
+                    logger.error("No se recibió respuesta del asistente")
                     raise Exception("No se recibió respuesta del asistente")
+                
+                logger.info(f"Recibidos {len(assistant_messages)} mensajes del asistente")
                 
                 # Extraer el texto de la respuesta
                 try:
+                    # Verificar que el contenido existe y no está vacío
+                    if not assistant_messages[0].content:
+                        logger.error("El contenido del mensaje está vacío")
+                        raise Exception("El contenido del mensaje está vacío")
+                    
+                    logger.info(f"Tipo de contenido: {type(assistant_messages[0].content)}")
+                    logger.info(f"Longitud del contenido: {len(assistant_messages[0].content)}")
+                    
+                    if not assistant_messages[0].content[0].text:
+                        logger.error("El texto del mensaje está vacío o no existe")
+                        raise Exception("El texto del mensaje está vacío o no existe")
+                    
                     translation_text = assistant_messages[0].content[0].text.value
+                    
+                    if not translation_text or translation_text.strip() == "":
+                        logger.error("Texto de traducción vacío")
+                        raise Exception("El texto de traducción está vacío")
+                    
+                    logger.info(f"Longitud del texto traducido: {len(translation_text)}")
+                    
                 except (IndexError, AttributeError, KeyError) as e:
                     logger.error(f"Error al extraer respuesta: {e}")
-                    logger.error(f"Contenido del mensaje: {assistant_messages[0].content}")
+                    logger.error(f"Estructura del mensaje: {assistant_messages[0]}")
                     raise Exception(f"Error al extraer respuesta: {e}")
                 
                 # Procesar las traducciones
@@ -311,21 +385,37 @@ Devuelve SOLO los textos traducidos, conservando el formato original de enumerac
                 pattern = r"\[(\d+)\](.*?)(?=\[\d+\]|$)"
                 matches = re.findall(pattern, translation_text, re.DOTALL)
                 
+                logger.info(f"Coincidencias encontradas con patrón: {len(matches)}")
+                
                 # Si no hay coincidencias o faltan algunas, intentar extraer línea por línea
                 if not matches or len(matches) < len(texts):
+                    logger.warning(f"No se encontraron suficientes coincidencias. Procesando líneas...")
                     lines = translation_text.strip().split("\n")
                     translations = [line.strip() for line in lines if line.strip()]
+                    logger.info(f"Líneas procesadas: {len(translations)}")
                 else:
                     # Ordenar las coincidencias por número y extraer solo el texto
                     sorted_matches = sorted(matches, key=lambda x: int(x[0]))
                     translations = [match[1].strip() for match in sorted_matches]
+                    logger.info(f"Coincidencias procesadas: {len(translations)}")
                 
                 # Verificar que tenemos el mismo número de traducciones que de textos originales
                 if len(translations) != len(texts):
                     logger.warning(f"Desajuste entre originales ({len(texts)}) y traducciones ({len(translations)})")
+                    
+                    # Guardar estado para depuración
+                    debug_info = {
+                        "original_texts": texts,
+                        "translation_text": translation_text,
+                        "parsed_translations": translations
+                    }
+                    logger.debug(f"Información de depuración: {json.dumps(debug_info, ensure_ascii=False)}")
+                    
                     if len(translations) < len(texts):
+                        logger.warning(f"Faltan traducciones. Añadiendo {len(texts) - len(translations)} elementos vacíos")
                         translations.extend(["" for _ in range(len(texts) - len(translations))])
                     else:
+                        logger.warning(f"Sobran traducciones. Recortando a {len(texts)} elementos")
                         translations = translations[:len(texts)]
                 
                 logger.info(f"Traducción completada exitosamente para {len(translations)} textos")
@@ -353,9 +443,11 @@ Devuelve SOLO los textos traducidos, conservando el formato original de enumerac
                     continue
                 else:
                     self.errors += 1
+                    logger.error(f"Se agotaron los reintentos ({max_retries}) para la traducción")
                     raise Exception(f"Error en la traducción después de {max_retries} intentos: {e}")
         
         # No debería llegar aquí, pero por si acaso
+        logger.error(f"Error inesperado en la traducción después de {max_retries} intentos")
         raise Exception(f"Error inesperado en la traducción después de {max_retries} intentos")
     
     def _estimate_tokens(self, text):
@@ -583,39 +675,78 @@ def process_translation_task(input_path, output_dir, source_lang, target_lang, j
         if process_matches:
             process_file = process_matches[0]
             file_id = process_file.name.split("_processing_")[0]
+            logger.info(f"Proceso asociado a file_id: {file_id}")
         
         output_path = Path(output_dir) / f"{Path(input_path).stem}_translated_{target_lang}.pptx"
         
+        # Verificar que el archivo PPTX existe y es válido
+        if not os.path.exists(input_path):
+            logger.error(f"Archivo no encontrado: {input_path}")
+            raise FileNotFoundError(f"No se encontró el archivo: {input_path}")
+            
+        # Verificar que el archivo es un PPTX válido
+        try:
+            from zipfile import ZipFile, BadZipFile
+            try:
+                with ZipFile(input_path) as zf:
+                    # Verificar que contiene los archivos necesarios de un PPTX
+                    content_types = any('[Content_Types].xml' in filename for filename in zf.namelist())
+                    presentation = any('ppt/presentation.xml' in filename for filename in zf.namelist())
+                    slides_folder = any('ppt/slides/' in filename for filename in zf.namelist())
+                    
+                    if not (content_types and presentation and slides_folder):
+                        logger.error(f"El archivo no parece ser un PPTX válido: {input_path}")
+                        raise Exception("El archivo no tiene la estructura de un documento PPTX válido")
+                        
+                    logger.info(f"Archivo PPTX verificado: {input_path}")
+            except BadZipFile:
+                logger.error(f"El archivo no es un archivo ZIP válido: {input_path}")
+                raise Exception("El archivo no es un documento PPTX válido (no es un ZIP)")
+        except Exception as e:
+            logger.error(f"Error al verificar el archivo PPTX: {e}")
+            raise Exception(f"Error al verificar el archivo PPTX: {str(e)}")
+            
         # Iniciar proceso de traducción
-        translator = Translator()
+        logger.info("Inicializando traductor...")
+        translator = Translator(target_language=target_lang)
         
         # Verificar que el traductor se inicializó correctamente
+        if not translator.client:
+            logger.error("El cliente OpenAI no está disponible")
+            raise Exception("No se pudo inicializar el traductor: Cliente OpenAI no disponible")
+            
         if not translator.assistant_id:
+            logger.error("El ID de asistente no está disponible")
             raise Exception("No se pudo inicializar el traductor: ID de asistente no disponible")
             
+        logger.info("Inicializando editor PPTX...")
         editor = PPTXEditor(translator)
         
+        # Iniciar traducción con medición de tiempo
         start_time = time.time()
+        logger.info(f"Comenzando procesamiento de PPTX: {input_path} -> {output_path}")
         result_path = editor.process_pptx(input_path, output_path)
+        elapsed = time.time() - start_time
+        logger.info(f"Procesamiento completado en {elapsed:.2f} segundos")
         
         if not result_path or not Path(result_path).exists():
+            logger.error("No se generó el archivo de salida")
             raise Exception("No se generó el archivo de salida")
+            
+        logger.info(f"Archivo generado correctamente: {result_path}")
         
         # Recopilar estadísticas
         stats = {
             "slides_processed": editor.slides_processed,
             "texts_translated": editor.total_texts,
-            "total_time": time.time() - start_time,
+            "total_time": elapsed,
             "api_calls": translator.api_calls,
             "rate_limit_retries": translator.rate_limit_retries,
             "successful_retries": translator.successful_retries,
             "errors": translator.errors,
-            "duplicates_avoided": translator.duplicates_avoided,
-            "cache_hits": translator.cache_hits,
-            "cache_misses": translator.cache_misses,
-            "input_tokens": translator.total_input_tokens,
-            "output_tokens": translator.total_output_tokens,
-            "cached_tokens": translator.cached_tokens
+            "cache_hits": getattr(translator, 'cache_hits', 0),
+            "cache_misses": getattr(translator, 'cache_misses', 0),
+            "duplicates_avoided": getattr(translator, 'duplicates_avoided', 0)
         }
         
         # Almacenar resultado
@@ -632,36 +763,60 @@ def process_translation_task(input_path, output_dir, source_lang, target_lang, j
             "stats": stats
         }
         
+        logger.info(f"Guardando resultado en {result_file}")
         with open(result_file, "w", encoding="utf-8") as f:
             json.dump(result_data, f, ensure_ascii=False)
             
     except Exception as e:
-        logger.error(f"Error procesando traducción: {str(e)}")
+        logger.error(f"Error procesando traducción: {str(e)}", exc_info=True)
         
+        # Guardar información del error
+        error_data = {
+            "status": "error", 
+            "message": str(e),
+            "error_type": type(e).__name__,
+            "completion_time": time.time()
+        }
+        
+        # Incluir detalles adicionales si es posible
+        if 'translator' in locals() and translator:
+            error_data["details"] = {
+                "client_initialized": hasattr(translator, 'client') and translator.client is not None,
+                "assistant_id_set": hasattr(translator, 'assistant_id') and translator.assistant_id is not None,
+                "api_calls": getattr(translator, 'api_calls', 0),
+                "errors": getattr(translator, 'errors', 0)
+            }
+        
+        logger.info(f"Guardando información de error en {result_file}")
         with open(result_file, "w", encoding="utf-8") as f:
-            json.dump({
-                "status": "error", 
-                "message": str(e),
-                "completion_time": time.time()
-            }, f, ensure_ascii=False)
+            json.dump(error_data, f, ensure_ascii=False)
     finally:
         # Limpieza de archivos temporales
         if process_file and process_file.exists():
             try:
+                logger.info(f"Eliminando archivo de proceso: {process_file}")
                 process_file.unlink()
-            except:
+            except Exception as e:
+                logger.error(f"Error al eliminar archivo de proceso: {e}")
                 pass
         
+        # Intenta eliminar archivo de entrada si es temporal
         if os.path.exists(input_path):
-            try:
-                os.unlink(input_path)
-            except:
-                pass
+            if '/temp/' in input_path.lower() or 'temporal' in input_path.lower():
+                try:
+                    logger.info(f"Eliminando archivo de entrada temporal: {input_path}")
+                    os.unlink(input_path)
+                except Exception as e:
+                    logger.error(f"Error al eliminar archivo de entrada: {e}")
+                    pass
             
+        # Intenta eliminar directorio de salida temporal
         if os.path.exists(output_dir):
             try:
+                logger.info(f"Eliminando directorio de salida temporal: {output_dir}")
                 shutil.rmtree(output_dir)
-            except:
+            except Exception as e:
+                logger.error(f"Error al eliminar directorio de salida: {e}")
                 pass
 
 # API Endpoints
@@ -750,11 +905,15 @@ async def process_translation(
         target_language = request.get("target_language", "en")
         
         if not file_id:
+            logger.error("Se requiere file_id para procesar la traducción")
             raise HTTPException(status_code=400, detail="Se requiere file_id")
+        
+        logger.info(f"Procesando traducción para file_id: {file_id}, de {source_language} a {target_language}")
         
         # Verificar si ya está en proceso
         result_check = list(CONFIG["storage_dir"].glob(f"{file_id}_processing_*.json"))
         if result_check:
+            logger.info(f"Ya existe un proceso de traducción en curso para file_id: {file_id}")
             with open(result_check[0], "r", encoding="utf-8") as f:
                 existing_job = json.load(f)
                 
@@ -770,24 +929,52 @@ async def process_translation(
         # Cargar metadatos
         file_meta_path = CONFIG["storage_dir"] / f"{file_id}_meta.json"
         if not file_meta_path.exists():
+            logger.error(f"Archivo de metadatos no encontrado: {file_meta_path}")
             raise HTTPException(status_code=404, detail="Archivo no encontrado")
         
-        with open(file_meta_path, "r", encoding="utf-8") as f:
-            file_meta = json.load(f)
+        try:
+            with open(file_meta_path, "r", encoding="utf-8") as f:
+                file_meta = json.load(f)
+        except json.JSONDecodeError as e:
+            logger.error(f"Error al decodificar JSON de metadatos: {e}")
+            raise HTTPException(status_code=500, detail=f"Error al leer metadatos: {str(e)}")
         
         input_path = file_meta.get("input_path")
         if not input_path or not os.path.exists(input_path):
+            logger.error(f"Archivo original no encontrado: {input_path}")
             raise HTTPException(status_code=404, detail="Archivo original no encontrado")
         
         file_size = os.path.getsize(input_path)
         if file_size == 0:
+            logger.error(f"El archivo está vacío: {input_path}")
             raise HTTPException(status_code=400, detail="El archivo está vacío")
         
         # Verificar que podemos acceder al asistente
+        logger.info("Verificando configuración de OpenAI...")
         credentials = load_credentials()
-        assistant_id = credentials.get("openai", {}).get("assistant_id")
+        assistant_id = credentials.get("openai", {}).get("assistant_id", OPENAI_ASSISTANT_ID)
+        api_key = credentials.get("openai", {}).get("api_key", OPENAI_API_KEY)
+        
         if not assistant_id:
+            logger.error("ID de asistente no encontrado en configuración")
             raise HTTPException(status_code=500, detail="Configuración de traducción no disponible: ID de asistente no encontrado")
+            
+        if not api_key:
+            logger.error("API key no encontrada en configuración")
+            raise HTTPException(status_code=500, detail="Configuración de traducción no disponible: API key no encontrada")
+            
+        # Verificación rápida de inicialización de Translator
+        try:
+            logger.info("Probando inicialización de Translator...")
+            test_translator = Translator()
+            if not test_translator.client or not test_translator.assistant_id:
+                logger.error(f"Error en inicialización de Translator: cliente o ID de asistente no disponibles")
+                logger.error(f"client: {test_translator.client}, assistant_id: {test_translator.assistant_id}")
+                raise Exception("El traductor no pudo inicializarse correctamente")
+            logger.info("Translator inicializado correctamente para verificación")
+        except Exception as e:
+            logger.error(f"Error al inicializar Translator: {e}")
+            raise HTTPException(status_code=500, detail=f"Error en la configuración del traductor: {str(e)}")
         
         # Preparar tarea
         output_dir = tempfile.mkdtemp()
@@ -798,7 +985,7 @@ async def process_translation(
         # Registrar trabajo
         processing_file = CONFIG["storage_dir"] / f"{file_id}_processing_{job_id}.json"
         with open(processing_file, "w", encoding="utf-8") as f:
-            json.dump({
+            job_data = {
                 "job_id": job_id,
                 "file_id": file_id,
                 "input_path": input_path,
@@ -808,9 +995,12 @@ async def process_translation(
                 "target_language": target_language,
                 "start_time": time.time(),
                 "assistant_id": assistant_id
-            }, f, ensure_ascii=False)
+            }
+            json.dump(job_data, f, ensure_ascii=False)
+            logger.info(f"Trabajo registrado: {job_id} para archivo {file_id}")
         
         # Iniciar tarea en segundo plano
+        logger.info(f"Iniciando tarea en segundo plano con job_id: {job_id}")
         background_tasks.add_task(
             process_translation_task,
             input_path,
@@ -832,7 +1022,7 @@ async def process_translation(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error: {str(e)}")
+        logger.error(f"Error al procesar traducción: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error al procesar traducción: {str(e)}")
 
 @router.get("/jobs/{job_id}")
