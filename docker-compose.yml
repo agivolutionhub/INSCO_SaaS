@@ -11,13 +11,8 @@ services:
     volumes:
       - ./storage:/app/storage
       - ./tmp:/app/tmp
-      - ./data:/app/data
       - ./config:/app/config
       - ./backend/config/auth_credentials.json:/app/config/auth_credentials.json
-      - ./backend/config/openapi.json:/app/config/openapi.json
-      - ./backend/config/sttapi.json:/app/config/sttapi.json
-      - ./backend/config/translator.json:/app/config/translator.json
-      - ./backend/config/ttsapi.json:/app/config/ttsapi.json
     environment:
       - ENVIRONMENT=production
       - TZ=Europe/Madrid
@@ -33,7 +28,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 2G
     labels:
       # Configuración para el frontend
       - "traefik.enable=true"
@@ -46,7 +41,4 @@ services:
       - "traefik.http.routers.insco-api.rule=Host(`tools.inscoia.es`) && PathPrefix(`/api`)"
       - "traefik.http.routers.insco-api.entrypoints=websecure" 
       - "traefik.http.routers.insco-api.tls=true"
-      - "traefik.http.services.insco-api.loadbalancer.server.port=8088"
-
-volumes:
-  mongodb_data: 
+      - "traefik.http.services.insco-api.loadbalancer.server.port=8088" 
