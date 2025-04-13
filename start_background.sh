@@ -182,10 +182,10 @@ EOL
                 return 1
             fi
             return 0
-        } else {
+        else
             log "ERROR" "No se puede determinar en qué puerto está el frontend"
             return 1
-        }
+        fi
     fi
     
     return 0
