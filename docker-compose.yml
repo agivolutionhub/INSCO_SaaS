@@ -6,7 +6,8 @@ services:
     container_name: insco-app
     restart: always
     ports:
-      - "8088:8088"
+      - "8088:8088"  # Backend API
+      - "3001:3001"  # Frontend
     volumes:
       - ./storage:/app/storage
       - ./data:/app/data
@@ -16,6 +17,8 @@ services:
       - ENVIRONMENT=production
       - TZ=Europe/Madrid
       - PYTHONUNBUFFERED=1
+      - BACKEND_PORT=8088
+      - FRONTEND_PORT=3001
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
       interval: 30s
@@ -23,11 +26,18 @@ services:
       retries: 3
       start_period: 40s
     labels:
+      # Configuración para el frontend
       - "traefik.enable=true"
-      - "traefik.http.routers.insco-app.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.insco-app.entrypoints=websecure"
-      - "traefik.http.routers.insco-app.tls=true"
-      - "traefik.http.services.insco-app.loadbalancer.server.port=8088"
+      - "traefik.http.routers.insco-front.rule=Host(`tools.inscoia.es`)"
+      - "traefik.http.routers.insco-front.entrypoints=websecure"
+      - "traefik.http.routers.insco-front.tls=true"
+      - "traefik.http.services.insco-front.loadbalancer.server.port=3001"
+      
+      # Configuración para el backend API
+      - "traefik.http.routers.insco-api.rule=Host(`tools.inscoia.es`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.insco-api.entrypoints=websecure" 
+      - "traefik.http.routers.insco-api.tls=true"
+      - "traefik.http.services.insco-api.loadbalancer.server.port=8088"
 
 volumes:
   mongodb_data: 

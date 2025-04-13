@@ -12,9 +12,9 @@ RUN npm ci
 # Copiar el código fuente del frontend
 COPY frontend/ ./
 
-# Aumentar memoria disponible para Node y construir el frontend para producción
+# Construir el frontend para producción
 ENV NODE_OPTIONS="--max-old-space-size=4096"
-RUN npm run build || vite build
+RUN npm run build
 
 FROM python:3.10-slim
 
@@ -23,11 +23,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TERM=dumb \
     PYTHONUNBUFFERED=1
 
-# Instalar dependencias mínimas necesarias
+# Instalar dependencias necesarias
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    nodejs \
+    npm \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g http-server
 
 # Directorio de trabajo
 WORKDIR /app
@@ -40,13 +43,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
 
 # Copiar frontend construido
-COPY --from=frontend-builder /app/frontend/dist /app/static
+COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
 # Crear directorios necesarios
 RUN mkdir -p /app/storage /app/tmp /app/config && chmod -R 777 /app/storage /app/tmp /app/config
 
-EXPOSE 8088
+# Copiar script de inicio
+COPY docker-entrypoint.sh /app/
+RUN chmod +x /app/docker-entrypoint.sh
+
+EXPOSE 8088 3001
 ENV ENVIRONMENT=production
 
-# Comando de inicio
-CMD python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8088 --log-level info 
+# Usar script de entrada personalizado que inicia tanto frontend como backend
+ENTRYPOINT ["/app/docker-entrypoint.sh"] 
