@@ -39,25 +39,17 @@ for directory in [STORAGE_DIR, TMP_DIR]:
     directory.mkdir(parents=True, exist_ok=True)
     print(f"Directorio creado: {directory}")
 
-# Montar directorios estáticos
+# Montar directorios estáticos para archivos procesados
 app.mount("/tmp", StaticFiles(directory=TMP_DIR), name="temp")
 app.mount("/storage", StaticFiles(directory=STORAGE_DIR), name="storage")
 
-# Detectar frontend
-static_dir = Path("/app/static")
-if not static_dir.exists():
-    static_dir = BASE_DIR.parent / "frontend" / "dist"
-        
-if static_dir.exists():
-    app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
-    print(f"Frontend montado desde: {static_dir}")
-else:
-    print("⚠️ Frontend no encontrado. Solo API disponible")
+# Ya no montamos el frontend aquí, ya que se sirve separadamente en el puerto 3001
+# Dejamos solamente la API en este puerto 8088
 
 # Incluir router de autofit
 app.include_router(get_autofit_router())
 
-@app.get("/api/root")
+@app.get("/root")
 async def root():
     return {"message": "INSCO Autofit API", "version": "1.0.0"}
 
