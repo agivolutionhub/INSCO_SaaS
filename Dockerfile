@@ -23,15 +23,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TERM=dumb \
     PYTHONUNBUFFERED=1
 
-# Instalar dependencias necesarias incluyendo LibreOffice y FFmpeg
+# Instalar dependencias necesarias
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     nodejs \
     npm \
-    libreoffice \
-    libreoffice-script-provider-python \
-    python3-uno \
-    unoconv \
     poppler-utils \
     ffmpeg \
     fonts-liberation \
@@ -42,12 +38,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g http-server
-
-# Configurar LibreOffice para entorno sin interfaz (headless)
-RUN echo 'export UNO_PATH="/usr/lib/libreoffice/program"' > /etc/profile.d/insco_libreoffice.sh \
-    && echo 'export URE_BOOTSTRAP="file:///usr/lib/libreoffice/program/fundamental.ini"' >> /etc/profile.d/insco_libreoffice.sh \
-    && echo 'export PYTHONPATH="/usr/lib/libreoffice/program:$PYTHONPATH"' >> /etc/profile.d/insco_libreoffice.sh \
-    && chmod +x /etc/profile.d/insco_libreoffice.sh
 
 # Directorio de trabajo
 WORKDIR /app
