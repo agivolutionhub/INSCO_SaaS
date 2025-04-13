@@ -35,6 +35,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-transport-https \
     ca-certificates \
     gnupg \
+    # Herramientas de diagnóstico adicionales
+    procps \
+    net-tools \
+    wget \
+    nano \
+    vim \
+    htop \
+    iputils-ping \
+    telnet \
+    netcat \
+    lsof \
+    traceroute \
+    dnsutils \
+    iproute2 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g http-server
