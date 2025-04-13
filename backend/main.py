@@ -72,12 +72,43 @@ async def serve_frontend_routes(rest_of_path: str):
     Endpoint para manejar rutas de frontend como /slides/*
     Sirve directamente el archivo index.html del frontend para que React Router funcione
     """
-    # Ruta al archivo index.html del frontend compilado
-    index_path = BASE_DIR.parent / "frontend" / "dist" / "index.html"
+    # Posibles ubicaciones del index.html, en orden de prioridad
+    possible_paths = [
+        BASE_DIR.parent / "frontend" / "dist" / "index.html",  # ../frontend/dist/index.html
+        Path("/app/frontend/dist/index.html"),                 # Docker path
+        Path("/frontend/dist/index.html"),                     # Alternative Docker path
+    ]
     
-    # Verificar que el archivo existe
-    if not index_path.exists():
-        return {"error": "index.html no encontrado"}
+    # Log para diagnóstico
+    print(f"Buscando index.html para la ruta: /slides/{rest_of_path}")
+    
+    # Intentar cada ruta posible
+    index_path = None
+    for path in possible_paths:
+        print(f"Comprobando ruta: {path}")
+        if path.exists():
+            index_path = path
+            print(f"¡Encontrado! Usando: {index_path}")
+            break
+    
+    # Verificar que se encontró alguna ruta válida
+    if not index_path:
+        error_msg = "No se encontró index.html en ninguna ubicación conocida"
+        print(f"ERROR: {error_msg}")
+        print(f"Directorio actual: {os.getcwd()}")
+        print(f"Contenido de posibles directorios padre:")
+        
+        # Intentar listar contenidos de directorios padre para diagnóstico
+        for parent_dir in [BASE_DIR.parent, Path("/app"), Path("/")]:
+            if parent_dir.exists():
+                print(f"Contenido de {parent_dir}:")
+                try:
+                    for item in parent_dir.iterdir():
+                        print(f"  - {item}")
+                except Exception as e:
+                    print(f"  Error al listar contenido: {str(e)}")
+        
+        return {"error": error_msg, "checked_paths": [str(p) for p in possible_paths]}
     
     # Devolver el archivo index.html
     return FileResponse(index_path)
