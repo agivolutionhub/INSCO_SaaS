@@ -12,7 +12,7 @@ sys.path.insert(0, str(BASE_DIR))
 
 # Importar los routers
 from scripts.diapos_autofit import get_autofit_router
-from scripts.diapos_split import create_api
+from scripts.diapos_split import get_router as get_split_router
 
 # Crear una instancia de FastAPI
 app = FastAPI(
@@ -49,16 +49,7 @@ app.mount("/storage", StaticFiles(directory=STORAGE_DIR), name="storage")
 
 # Incluir routers
 app.include_router(get_autofit_router())
-
-# Obtener la aplicación split_pptx que contiene las rutas para dividir presentaciones
-split_app = create_api()
-
-# Obtener el router principal dentro de la app split_pptx
-# En lugar de añadir directamente las rutas, encontramos el router con el prefijo adecuado
-# e incluimos ese router en nuestra aplicación principal
-for route in split_app.routes:
-    if hasattr(route, "path") and route.path.startswith("/api/pptx"):
-        app.routes.append(route)
+app.include_router(get_split_router())  # Ahora incluimos directamente el router de split_pptx
 
 @app.get("/root")
 async def root():

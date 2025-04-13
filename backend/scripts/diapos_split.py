@@ -217,8 +217,8 @@ def process_pptx_task(input_path: str, output_dir: str, slides_per_chunk: int, j
         except Exception as e:
             logger.error(f"Error limpiando temporales: {str(e)}")
 
-def create_api():
-    app = FastAPI(title="PPTX Splitter API")
+def get_router() -> APIRouter:
+    """Crea y devuelve el router con los endpoints para dividir PPTX"""
     router = APIRouter(prefix="/api/pptx", tags=["pptx"])
 
     @router.post("/split")
@@ -305,7 +305,12 @@ def create_api():
             media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
         )
         
-    app.include_router(router)
+    return router
+
+def create_api():
+    """Crea y devuelve una aplicación FastAPI independiente con el router de división PPTX"""
+    app = FastAPI(title="PPTX Splitter API")
+    app.include_router(get_router())
     return app
 
 def api_main():
