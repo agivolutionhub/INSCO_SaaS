@@ -11,9 +11,40 @@ log "Iniciando INSCO SaaS en Docker..."
 # Configurar variables de entorno
 export BACKEND_PORT=${BACKEND_PORT:-8088}
 export FRONTEND_PORT=${FRONTEND_PORT:-3001}
+export UNO_PATH="/usr/lib/libreoffice/program"
+export URE_BOOTSTRAP="file:///usr/lib/libreoffice/program/fundamental.ini"
+export PYTHONPATH="/usr/lib/libreoffice/program:$PYTHONPATH"
 
 # Crear rutas iniciales
-mkdir -p /app/storage /app/tmp
+mkdir -p /app/storage/transcripts \
+    /app/storage/audio \
+    /app/storage/autofit \
+    /app/storage/translations \
+    /app/tmp/uploads \
+    /app/tmp/processed \
+    /app/tmp/captures \
+    /app/tmp/audio \
+    /app/tmp/videos
+
+# Comprobar el archivo de credenciales
+if [ ! -f "/app/config/auth_credentials.json" ]; then
+    log "ADVERTENCIA: No se encontró el archivo de credenciales"
+    log "Las funciones de IA podrían no estar disponibles"
+fi
+
+# Verificar la instalación de LibreOffice
+if command -v libreoffice &> /dev/null; then
+    log "LibreOffice disponible: $(libreoffice --version | head -n 1)"
+else
+    log "ADVERTENCIA: LibreOffice no está disponible"
+fi
+
+# Verificar la instalación de FFmpeg
+if command -v ffmpeg &> /dev/null; then
+    log "FFmpeg disponible: $(ffmpeg -version | head -n 1)"
+else
+    log "ADVERTENCIA: FFmpeg no está disponible"
+fi
 
 # Iniciar el frontend en segundo plano
 log "Iniciando frontend en puerto $FRONTEND_PORT..."

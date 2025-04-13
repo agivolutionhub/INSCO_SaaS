@@ -23,14 +23,31 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TERM=dumb \
     PYTHONUNBUFFERED=1
 
-# Instalar dependencias necesarias
+# Instalar dependencias necesarias incluyendo LibreOffice y FFmpeg
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     nodejs \
     npm \
+    libreoffice \
+    libreoffice-script-provider-python \
+    python3-uno \
+    unoconv \
+    poppler-utils \
+    ffmpeg \
+    fonts-liberation \
+    software-properties-common \
+    apt-transport-https \
+    ca-certificates \
+    gnupg \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g http-server
+
+# Configurar LibreOffice para entorno sin interfaz (headless)
+RUN echo 'export UNO_PATH="/usr/lib/libreoffice/program"' > /etc/profile.d/insco_libreoffice.sh \
+    && echo 'export URE_BOOTSTRAP="file:///usr/lib/libreoffice/program/fundamental.ini"' >> /etc/profile.d/insco_libreoffice.sh \
+    && echo 'export PYTHONPATH="/usr/lib/libreoffice/program:$PYTHONPATH"' >> /etc/profile.d/insco_libreoffice.sh \
+    && chmod +x /etc/profile.d/insco_libreoffice.sh
 
 # Directorio de trabajo
 WORKDIR /app
@@ -45,8 +62,18 @@ COPY backend/ ./backend/
 # Copiar frontend construido
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
-# Crear directorios necesarios
-RUN mkdir -p /app/storage /app/tmp /app/config && chmod -R 777 /app/storage /app/tmp /app/config
+# Crear directorios necesarios para todos los servicios
+RUN mkdir -p /app/storage/transcripts \
+    /app/storage/audio \
+    /app/storage/autofit \
+    /app/storage/translations \
+    /app/tmp/uploads \
+    /app/tmp/processed \
+    /app/tmp/captures \
+    /app/tmp/audio \
+    /app/tmp/videos \
+    /app/config \
+    && chmod -R 777 /app/storage /app/tmp /app/config
 
 # Copiar script de inicio
 COPY docker-entrypoint.sh /app/

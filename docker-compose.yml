@@ -10,9 +10,14 @@ services:
       - "3001:3001"  # Frontend
     volumes:
       - ./storage:/app/storage
+      - ./tmp:/app/tmp
       - ./data:/app/data
       - ./config:/app/config
       - ./backend/config/auth_credentials.json:/app/config/auth_credentials.json
+      - ./backend/config/openapi.json:/app/config/openapi.json
+      - ./backend/config/sttapi.json:/app/config/sttapi.json
+      - ./backend/config/translator.json:/app/config/translator.json
+      - ./backend/config/ttsapi.json:/app/config/ttsapi.json
     environment:
       - ENVIRONMENT=production
       - TZ=Europe/Madrid
@@ -25,6 +30,10 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
     labels:
       # Configuración para el frontend
       - "traefik.enable=true"
