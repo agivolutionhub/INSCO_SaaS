@@ -133,3 +133,32 @@ Cada fase será documentada con su fecha, cambios realizados y resultado.
   - Sistema de almacenamiento de archivos consistente
 - **Resultado**: Segunda herramienta (PPTX Split) completamente funcional e integrada
 - **Próximos pasos**: Continuar con la migración de funcionalidades adicionales (herramientas de video y audio) 
+
+### Fase 5: Solución de problemas de enrutamiento frontend-backend
+
+- **Fecha**: 14-04-2025
+- **Estado**: Completo
+- **Cambios**:
+  - Implementación de endpoints de respaldo para rutas de frontend
+  - Mejora de la compatibilidad entre frontend SPA y backend API
+  - Solución sin necesidad de modificar la configuración del servidor web
+- **Archivos modificados**:
+  - backend/main.py
+- **Problema resuelto**:
+  - Se identificó que las rutas frontend como `/slides/split` estaban siendo interceptadas por el backend
+  - El error 404 (Not Found) aparecía al intentar cargar la página de herramientas
+  - El enrutamiento de React Router fallaba porque el backend no sabía manejar estas rutas
+  - Las peticiones GET a rutas de frontend no llegaban a cargar el HTML principal
+- **Solución implementada**:
+  - Creación de un endpoint catch-all para rutas de frontend (`/slides/{rest_of_path:path}`)
+  - Respuesta JSON indicando que estas rutas deben ser manejadas por el frontend
+  - Patrón que puede extenderse a otras secciones de herramientas (`/video/*`, `/docs/*`, etc.)
+- **Ventajas**:
+  - Solución inmediata sin necesidad de modificar la configuración de nginx
+  - Compatibilidad entre aplicación SPA de React y backend FastAPI
+  - Estructura fácilmente ampliable para futuras secciones
+- **Alternativa ideal para el futuro**:
+  - Configuración de nginx para servir frontend en rutas no-API
+  - Proxy inverso solo para rutas `/api/*` hacia el backend
+- **Resultado**: Navegación de frontend funcionando correctamente con todas las herramientas
+- **Próximos pasos**: Considerar implementar un endpoint universal para todas las rutas de frontend o configurar correctamente nginx 
