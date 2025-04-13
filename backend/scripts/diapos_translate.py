@@ -9,7 +9,7 @@ import tiktoken
 from xml.etree import ElementTree as ET
 
 # CREDENCIALES EMBEBIDAS PARA VERSIÓN DE PRUEBA
-OPENAI_API_KEY = "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"
+OPENAI_API_KEY = "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"
 OPENAI_ASSISTANT_ID = "asst_mBShBt93TIVI0PKE7zsNO0eZ"
 
 router = APIRouter(prefix="/api/translate", tags=["translate"])
@@ -149,6 +149,7 @@ class Translator:
             logger.info(f"API key encontrada: {api_key[:8]}...{api_key[-4:]}")
             logger.info(f"Asistente ID: {self.assistant_id}")
             
+            # Inicializar cliente con solo el API key
             self.client = OpenAI(api_key=api_key)
             
         except Exception as e:
@@ -254,24 +255,27 @@ Devuelve SOLO los textos traducidos, conservando el formato original de enumerac
             try:
                 # Actualizar estadísticas
                 self.api_calls += 1
+                logger.info(f"Iniciando traducción de {len(texts)} textos")
                 
-                # Crear el thread para la traducción
+                # 1. Crear un thread (nueva conversación)
                 thread = self.client.beta.threads.create()
-                    
-                # Enviar el mensaje con los textos a traducir
-                self.client.beta.threads.messages.create(
+                logger.info(f"Thread creado: {thread.id}")
+                
+                # 2. Añadir mensaje al thread
+                message = self.client.beta.threads.messages.create(
                     thread_id=thread.id,
                     role="user",
-                    content=content,
+                    content=content
                 )
                 
-                # Ejecutar el asistente (no necesita modelo, temperatura ni tokens)
+                # 3. Ejecutar el asistente en el thread
                 run = self.client.beta.threads.runs.create(
                     thread_id=thread.id,
-                    assistant_id=self.assistant_id,
+                    assistant_id=self.assistant_id
                 )
+                logger.info(f"Run iniciado: {run.id}")
                 
-                # Esperar a que termine el proceso
+                # 4. Esperar a que se complete la ejecución
                 while run.status != "completed":
                     time.sleep(1)
                     run = self.client.beta.threads.runs.retrieve(
@@ -282,17 +286,23 @@ Devuelve SOLO los textos traducidos, conservando el formato original de enumerac
                     if run.status in ["failed", "cancelled", "expired"]:
                         raise Exception(f"Error en la ejecución del asistente: {run.status}")
                 
-                # Obtener los mensajes del asistente
+                # 5. Obtener la respuesta del asistente
                 messages = self.client.beta.threads.messages.list(
                     thread_id=thread.id
                 )
                 
-                # El último mensaje del asistente contiene la traducción
+                # El primer mensaje del asistente contiene la traducción
                 assistant_messages = [msg for msg in messages.data if msg.role == "assistant"]
                 if not assistant_messages:
                     raise Exception("No se recibió respuesta del asistente")
-                    
-                translation_text = assistant_messages[0].content[0].text.value
+                
+                # Extraer el texto de la respuesta
+                try:
+                    translation_text = assistant_messages[0].content[0].text.value
+                except (IndexError, AttributeError, KeyError) as e:
+                    logger.error(f"Error al extraer respuesta: {e}")
+                    logger.error(f"Contenido del mensaje: {assistant_messages[0].content}")
+                    raise Exception(f"Error al extraer respuesta: {e}")
                 
                 # Procesar las traducciones
                 translations = []
@@ -312,11 +322,13 @@ Devuelve SOLO los textos traducidos, conservando el formato original de enumerac
                 
                 # Verificar que tenemos el mismo número de traducciones que de textos originales
                 if len(translations) != len(texts):
+                    logger.warning(f"Desajuste entre originales ({len(texts)}) y traducciones ({len(translations)})")
                     if len(translations) < len(texts):
                         translations.extend(["" for _ in range(len(texts) - len(translations))])
                     else:
                         translations = translations[:len(texts)]
                 
+                logger.info(f"Traducción completada exitosamente para {len(translations)} textos")
                 return translations
                 
             except Exception as e:
