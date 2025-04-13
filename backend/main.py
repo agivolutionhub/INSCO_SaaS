@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import sys, os
-from rich.console import Console
 
 # Obtener el directorio base
 BASE_DIR = Path(__file__).resolve().parent
@@ -13,9 +12,6 @@ sys.path.insert(0, str(BASE_DIR))
 
 # Importar el router de autofit
 from scripts.diapos_autofit import get_autofit_router
-
-# Configurar logger
-console = Console()
 
 # Crear una instancia de FastAPI
 app = FastAPI(
@@ -40,7 +36,7 @@ TMP_DIR = BASE_DIR / "tmp"
 # Crear directorios básicos
 for directory in [STORAGE_DIR, TMP_DIR]:
     directory.mkdir(parents=True, exist_ok=True)
-    console.print(f"Directorio creado: {directory}")
+    print(f"Directorio creado: {directory}")
 
 # Montar directorios estáticos
 app.mount("/tmp", StaticFiles(directory=TMP_DIR), name="temp")
@@ -53,9 +49,9 @@ if not static_dir.exists():
         
 if static_dir.exists():
     app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
-    console.print(f"Frontend montado desde: {static_dir}")
+    print(f"Frontend montado desde: {static_dir}")
 else:
-    console.print("[bold yellow]⚠️ Frontend no encontrado. Solo API disponible[/bold yellow]")
+    print("⚠️ Frontend no encontrado. Solo API disponible")
 
 # Incluir router de autofit
 app.include_router(get_autofit_router())
@@ -77,5 +73,5 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8088))
-    console.print(f"[bold green]Iniciando servidor en puerto {port}...[/bold green]")
+    print(f"Iniciando servidor en puerto {port}...")
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True) 
