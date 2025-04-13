@@ -8,6 +8,14 @@ from openai import OpenAI
 import tiktoken
 from xml.etree import ElementTree as ET
 
+# Configurar logger
+logger = logging.getLogger("translate-pptx")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(handler)
+
 # CREDENCIALES EMBEBIDAS PARA VERSIÓN DE PRUEBA
 OPENAI_API_KEY = "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"
 OPENAI_ASSISTANT_ID = "asst_mBShBt93TIVI0PKE7zsNO0eZ"
@@ -54,14 +62,6 @@ except Exception as e:
     CONFIG["cache_dir"].mkdir(exist_ok=True, parents=True)
     CACHE_FILE = CONFIG["cache_dir"] / "translations.json"
     logger.info(f"Usando directorios temporales: {CONFIG['storage_dir']} y {CONFIG['cache_dir']}")
-
-# Configurar logger
-logger = logging.getLogger("translate-pptx")
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-    logger.addHandler(handler)
 
 def load_credentials():
     """Carga configuración y credenciales, usando primero las embebidas"""
