@@ -5,8 +5,11 @@
 # IP del servidor VPS
 VPS_IP="147.93.85.32"
 
+# Obtener directorio de instalación
+INSCO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
 # Configurar directorio
-cd /INSCO_SaaS
+cd "$INSCO_DIR"
 
 # Configurar URL de API para el frontend
 echo "VITE_API_URL=http://$VPS_IP:8088/api" > frontend/.env
@@ -26,7 +29,7 @@ pip install -r requirements.txt
 python -m uvicorn main:app --host 0.0.0.0 --port 8088 &
 BACKEND_PID=$!
 echo "Backend iniciado con PID: $BACKEND_PID"
-echo $BACKEND_PID > /INSCO_SaaS/backend.pid
+echo $BACKEND_PID > "$INSCO_DIR/backend.pid"
 cd ..
 
 # Esperar a que el backend esté disponible
@@ -50,7 +53,7 @@ npm run build
 npx serve -s dist -l 3001 --cors &
 FRONTEND_PID=$!
 echo "Frontend iniciado con PID: $FRONTEND_PID"
-echo $FRONTEND_PID > /INSCO_SaaS/frontend.pid
+echo $FRONTEND_PID > "$INSCO_DIR/frontend.pid"
 cd ..
 
 # Verificar que ambos servicios están activos
@@ -64,9 +67,8 @@ echo "Backend: http://$VPS_IP:8088/api/root"
 echo "Frontend: http://$VPS_IP:3001"
 
 # Mantenerse en primer plano para systemd
-# No usar wait, ya que systemd necesita que el proceso principal se mantenga
 # Crear un archivo para indicar que está corriendo
-touch /INSCO_SaaS/insco.running
+touch "$INSCO_DIR/insco.running"
 
 # Bucle infinito con comprobación de estado
 while true; do
@@ -75,7 +77,7 @@ while true; do
         cd backend
         python -m uvicorn main:app --host 0.0.0.0 --port 8088 &
         BACKEND_PID=$!
-        echo $BACKEND_PID > /INSCO_SaaS/backend.pid
+        echo $BACKEND_PID > "$INSCO_DIR/backend.pid"
         cd ..
     fi
     
@@ -84,7 +86,7 @@ while true; do
         cd frontend
         npx serve -s dist -l 3001 --cors &
         FRONTEND_PID=$!
-        echo $FRONTEND_PID > /INSCO_SaaS/frontend.pid
+        echo $FRONTEND_PID > "$INSCO_DIR/frontend.pid"
         cd ..
     fi
     
