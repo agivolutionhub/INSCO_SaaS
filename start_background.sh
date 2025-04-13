@@ -48,8 +48,22 @@ done
 
 # Iniciar el frontend
 cd frontend
+echo "Instalando dependencias del frontend..."
 npm install
+
+# Asegurarse de que TypeScript esté instalado globalmente
+echo "Verificando instalación de TypeScript..."
+if ! command -v tsc &> /dev/null; then
+    echo "TypeScript no encontrado, instalando globalmente..."
+    npm install -g typescript
+fi
+
+# Construir el frontend
+echo "Construyendo el frontend..."
 npm run build
+
+# Iniciar el servidor de frontend
+echo "Iniciando servidor de frontend..."
 npx serve -s dist -l 3001 --cors &
 FRONTEND_PID=$!
 echo "Frontend iniciado con PID: $FRONTEND_PID"
